@@ -54,8 +54,11 @@ enum class GlucoseConnectionOption(val displayName: String) {
     @SerialName("manual") MANUAL("Manual");
 
     companion object {
-        /** Manual only for now — the sync services are not ported yet. */
-        val selectableInThisBuild = listOf(MANUAL)
+        /**
+         * What setup offers. Dexcom Share and FreeStyle Libre are not ported yet, and an
+         * option that cannot work is worse than one that is not shown.
+         */
+        val selectableInThisBuild = listOf(NIGHTSCOUT, MANUAL)
     }
 }
 
@@ -81,8 +84,21 @@ data class GlucoseSettings(
     /** Always stored in mg/dL, whatever the user reads. */
     val lowGlucose: Double = 70.0,
     val highGlucose: Double = 180.0,
+    /** Nightscout site address, already normalized. The token lives in [CredentialStore]. */
+    val nightscoutUrl: String = "",
+    /** When the last successful sync finished, so staleness can be shown honestly. */
+    val lastSyncMillis: Long = 0L,
 ) {
     val isManualMode: Boolean get() = connection == GlucoseConnectionOption.MANUAL
+
+    /** The vendor tag readings from the active source are stored under. */
+    val primarySourceTag: String?
+        get() = when (connection) {
+            GlucoseConnectionOption.NIGHTSCOUT -> GlucoseSourceTag.NIGHTSCOUT
+            GlucoseConnectionOption.DEXCOM -> GlucoseSourceTag.DEXCOM
+            GlucoseConnectionOption.LIBRE -> GlucoseSourceTag.LIBRE
+            GlucoseConnectionOption.MANUAL -> null
+        }
 }
 
 /**

@@ -8,6 +8,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.boostt1d.android.data.Countries
+import com.boostt1d.android.data.CredentialStore
+import com.boostt1d.android.data.GlucoseConnectionOption
+import com.boostt1d.android.sync.NightscoutService
+import com.boostt1d.android.sync.NightscoutUrl
 import com.boostt1d.android.data.GlucoseDisplay
 import com.boostt1d.android.data.GlucoseSettings
 import com.boostt1d.android.data.PhotoScaling
@@ -23,6 +27,8 @@ import java.util.UUID
 class OnboardingViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = ProfileRepository(application)
+    private val credentials = CredentialStore(application)
+    private val nightscout = NightscoutService()
 
     var step by mutableStateOf(OnboardingStep.PERSONAL_INFO)
         private set
@@ -36,6 +42,16 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
 
     /** True once setup has been committed, so the host can stop showing this flow. */
     var isComplete by mutableStateOf(false)
+        private set
+
+    var testingConnection by mutableStateOf(false)
+        private set
+
+    var connectionTestResult by mutableStateOf<String?>(null)
+        private set
+
+    /** Null until a test has run; false only for a connection that returns nothing. */
+    var connectionTestSucceeded by mutableStateOf<Boolean?>(null)
         private set
 
     private var hasManuallyChangedUnit = false
@@ -74,6 +90,29 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         val value = age.toIntOrNull()
         if (value != null && !com.boostt1d.android.data.AgeSelectionOptions.requiresParentGuardian(value)) {
             draft = draft.copy(parentName = "", parentEmail = "")
+        }
+    }
+
+    /**
+     * Probes the site before setup finishes, so a wrong address or token is caught while
+     * the user is still looking at the field rather than on an empty dashboard later.
+     */
+    fun testNightscout() {
+        if (testingConnection) return
+        val url = draft.nightscoutUrl.trim()
+        if (url.isEmpty()) return
+
+        viewModelScope.launch {
+            testingConnection = true
+            connectionTestResult = null
+            val report = runCatching {
+                nightscout.testConnection(url, draft.nightscoutToken.trim())
+            }.getOrNull()
+
+            connectionTestSucceeded = report?.glucoseAvailable
+            connectionTestResult = report?.message(hasToken = draft.nightscoutToken.isNotBlank())
+                ?: "Could not reach the site. Check the address and your connection."
+            testingConnection = false
         }
     }
 
@@ -171,7 +210,18 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
             connection = draft.connection,
             lowGlucose = draft.lowGlucose,
             highGlucose = draft.highGlucose,
+            // Normalized once, here, so nothing downstream has to re-derive it.
+            nightscoutUrl = if (draft.connection == GlucoseConnectionOption.NIGHTSCOUT) {
+                NightscoutUrl.normalize(draft.nightscoutUrl)
+            } else {
+                ""
+            },
         )
+
+        // The token goes to encrypted storage, never into the settings blob.
+        if (draft.connection == GlucoseConnectionOption.NIGHTSCOUT) {
+            credentials.nightscoutToken = draft.nightscoutToken.trim()
+        }
 
         // iOS also POSTs demographics to the backend here when the user opted into the
         // mailing list. Deliberately not wired yet: the Android registration endpoint

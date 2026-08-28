@@ -5,6 +5,7 @@ import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.GlucoseConnectionOption
 import com.boostt1d.android.data.GlucoseDisplay
 import com.boostt1d.android.data.InsulinTherapyType
+import com.boostt1d.android.sync.NightscoutUrl
 
 /**
  * The named stages of setup, in the order a person expects to be asked: who you
@@ -40,8 +41,9 @@ data class OnboardingDraft(
     val countryName: String = "",
     val countryCode: String = "",
     val marketingOptIn: Boolean = false,
-    /** Manual is the only option this build offers, and so the only starting value. */
     val connection: GlucoseConnectionOption = GlucoseConnectionOption.MANUAL,
+    val nightscoutUrl: String = "",
+    val nightscoutToken: String = "",
     val photoBase64: String? = null,
     val bgUnit: BGUnit = BGUnit.MGDL,
     /** Stored in mg/dL whatever the user is reading, exactly as on iOS. */
@@ -97,7 +99,11 @@ object OnboardingValidation {
 
         OnboardingStep.CONNECTION -> when (draft.connection) {
             GlucoseConnectionOption.MANUAL -> true
-            // The remote sources need credentials that this build does not collect.
+            // A token is required, not optional: without one Nightscout returns readings
+            // but no treatments or therapy settings, which is most of what the app reads.
+            GlucoseConnectionOption.NIGHTSCOUT ->
+                draft.nightscoutUrl.isNotBlank() && draft.nightscoutToken.isNotBlank()
+            // Dexcom and Libre need credentials this build does not collect.
             else -> false
         }
 
@@ -147,6 +153,14 @@ object OnboardingValidation {
     }
 
     private fun connectionProblem(draft: OnboardingDraft): String? {
+        if (draft.connection == GlucoseConnectionOption.NIGHTSCOUT) {
+            val trimmed = draft.nightscoutUrl.trim()
+            if (trimmed.isNotEmpty() && NightscoutUrl.normalize(trimmed).isEmpty()) {
+                return "That does not look like a web address. It should look like " +
+                    "https://yourname.up.railway.app."
+            }
+        }
+
         val unit = draft.bgUnit
         val label = unit.displayName
         if (draft.lowGlucose < 60 || draft.lowGlucose > 110) {

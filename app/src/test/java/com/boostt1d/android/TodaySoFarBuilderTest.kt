@@ -22,7 +22,7 @@ class TodaySoFarBuilderTest {
     private val utc = TimeZone.getTimeZone("UTC")
 
     /** Midday on a fixed date, so the tests never depend on when they run. */
-    private val now = 1_756_387_200_000L // 2025-08-28T12:00:00Z
+    private val now = 1_756_387_200_000L // 2025-08-28T13:20:00Z
 
     private val dayStart = TodaySoFarBuilder.startOfDay(now, utc)
 

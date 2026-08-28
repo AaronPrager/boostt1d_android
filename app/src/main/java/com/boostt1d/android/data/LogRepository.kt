@@ -76,6 +76,33 @@ class LogRepository(context: Context) {
         )
     }
 
+    /**
+     * Readings downloaded from a remote source.
+     *
+     * Written with the source tag rather than merged against what is already stored: the
+     * primary key is the exact millisecond, so re-downloading an overlapping window
+     * updates those rows instead of duplicating them. Reconciling two vendors that
+     * describe the *same moment slightly differently* happens at read time, in
+     * [GlucoseSourceStitch], because which one wins depends on the active source.
+     */
+    suspend fun upsertRemoteReadings(entries: List<NightscoutGlucoseEntry>, sourceTag: String) {
+        if (entries.isEmpty()) return
+        dao.upsert(entries.map { GlucoseReadingEntity.from(it, sourceTag) })
+    }
+
+    /**
+     * Treatments downloaded from a remote source, merged with what is already held.
+     *
+     * Deduped on [NightscoutTreatment.cacheKey], and the remote row wins: it carries the
+     * Nightscout id and any algorithm flags a local copy would not have.
+     */
+    suspend fun mergeRemoteTreatments(remote: List<NightscoutTreatment>) {
+        if (remote.isEmpty()) return
+        val remoteKeys = remote.map { it.cacheKey }.toSet()
+        val kept = _treatments.value.filterNot { it.cacheKey in remoteKeys }
+        replaceTreatments(kept + remote)
+    }
+
     suspend fun deleteReading(epochMilliseconds: Long) = dao.delete(epochMilliseconds)
 
     suspend fun readingsBetween(from: Long, to: Long): List<NightscoutGlucoseEntry> =

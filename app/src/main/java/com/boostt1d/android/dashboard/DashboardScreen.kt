@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Vaccines
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -35,6 +36,7 @@ import com.boostt1d.android.charts.GlucoseChart
 import com.boostt1d.android.charts.glucoseColor
 import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.GlucoseDisplay
+import com.boostt1d.android.data.GlucoseConnectionOption
 import com.boostt1d.android.data.GlucoseSettings
 import com.boostt1d.android.data.LogState
 import com.boostt1d.android.data.PhotoScaling
@@ -66,6 +68,8 @@ fun DashboardScreen(
     onAddReading: () -> Unit,
     onAddEvent: () -> Unit,
     onOpenBolusCalculator: () -> Unit,
+    syncing: Boolean,
+    onSyncNow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = BoostTheme.colors
@@ -107,6 +111,17 @@ fun DashboardScreen(
                 high = high,
                 nowMillis = nowMillis,
             )
+        }
+
+        if (settings.connection == GlucoseConnectionOption.NIGHTSCOUT) {
+            item {
+                SyncStatusRow(
+                    lastSyncMillis = settings.lastSyncMillis,
+                    syncing = syncing,
+                    nowMillis = nowMillis,
+                    onSyncNow = onSyncNow,
+                )
+            }
         }
 
         item {
@@ -369,5 +384,56 @@ private fun Avatar(profile: UserProfile, onClick: () -> Unit) {
                 color = colors.textSecondary,
             )
         }
+    }
+}
+
+/**
+ * Whether the numbers above are current.
+ *
+ * A CGM's history window is a hard loss boundary — Dexcom keeps about a day, Libre about
+ * half of one — so a sync that quietly stopped working costs readings that cannot be
+ * recovered later. Saying "synced 3 hours ago" plainly is what gives someone the chance
+ * to notice before the window closes.
+ */
+@Composable
+private fun SyncStatusRow(
+    lastSyncMillis: Long,
+    syncing: Boolean,
+    nowMillis: Long,
+    onSyncNow: () -> Unit,
+) {
+    val colors = BoostTheme.colors
+    val ageMinutes = if (lastSyncMillis == 0L) Long.MAX_VALUE else (nowMillis - lastSyncMillis) / 60_000
+    val stale = ageMinutes > 60
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                if (stale) colors.high.copy(alpha = 0.10f) else colors.surface,
+                RoundedCornerShape(BoostRadius.md),
+            )
+            .clickable(enabled = !syncing, onClick = onSyncNow)
+            .padding(horizontal = BoostSpacing.sm, vertical = BoostSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
+    ) {
+        Icon(
+            Icons.Filled.CloudSync,
+            contentDescription = null,
+            tint = if (stale) colors.high else colors.textSecondary,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            when {
+                syncing -> "Syncing with Nightscout…"
+                lastSyncMillis == 0L -> "Not synced yet — tap to sync"
+                stale -> "Last synced ${Fmt.ago(lastSyncMillis, nowMillis)} — tap to sync"
+                else -> "Synced ${Fmt.ago(lastSyncMillis, nowMillis)}"
+            },
+            fontSize = 13.sp,
+            color = if (stale) colors.textPrimary else colors.textSecondary,
+            modifier = Modifier.weight(1f),
+        )
     }
 }

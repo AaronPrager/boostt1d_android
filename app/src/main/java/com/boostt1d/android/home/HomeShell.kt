@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ListAlt
@@ -56,6 +57,7 @@ enum class HomeDestination {
     BLOOD_GLUCOSE,
     EVENT_LOG,
     BOLUS_CALCULATOR,
+    DATA_SOURCE,
     THERAPY_PROFILE,
     SETTINGS,
     ABOUT,
@@ -96,6 +98,7 @@ fun HomeShell(
         SubmenuItem("Event Log", "Insulin, carbs and events", Icons.AutoMirrored.Filled.MenuBook, HomeDestination.EVENT_LOG),
     )
     val menuItems = listOf(
+        SubmenuItem("Data Source", "Nightscout or manual entry", Icons.Filled.Cloud, HomeDestination.DATA_SOURCE),
         SubmenuItem("Insulin Doses", "Basal, carb ratio, correction", Icons.Filled.Tune, HomeDestination.THERAPY_PROFILE),
         SubmenuItem("Bolus Calculator", "Work out a dose", Icons.Filled.Calculate, HomeDestination.BOLUS_CALCULATOR),
         SubmenuItem("Profile", "Units, range and account", Icons.Filled.Person, HomeDestination.SETTINGS),

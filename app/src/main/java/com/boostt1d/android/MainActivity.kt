@@ -33,6 +33,7 @@ import com.boostt1d.android.logs.EventLogScreen
 import com.boostt1d.android.logs.GlucoseLogScreen
 import com.boostt1d.android.onboarding.OnboardingScreen
 import com.boostt1d.android.profile.ProfileScreen
+import com.boostt1d.android.sync.DataSourceScreen
 import com.boostt1d.android.therapy.TherapyProfileScreen
 import com.boostt1d.android.ui.BoostT1DTheme
 import com.boostt1d.android.ui.BoostTheme
@@ -61,6 +62,8 @@ class MainActivity : ComponentActivity() {
 private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val logs by viewModel.logState.collectAsStateWithLifecycle()
+    val syncing by viewModel.syncing.collectAsStateWithLifecycle()
+    val lastOutcome by viewModel.lastOutcome.collectAsStateWithLifecycle()
 
     var destination by remember { mutableStateOf(HomeDestination.DASHBOARD) }
     var showingAddReading by remember { mutableStateOf(false) }
@@ -108,6 +111,8 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         onAddReading = { showingAddReading = true },
                         onAddEvent = { showingAddEvent = true },
                         onOpenBolusCalculator = { destination = HomeDestination.BOLUS_CALCULATOR },
+                        syncing = syncing,
+                        onSyncNow = { viewModel.syncNow(current.settings) },
                         modifier = modifier,
                     )
 
@@ -152,6 +157,22 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         settings = current.settings,
                         onSave = viewModel::save,
                         onBack = { destination = HomeDestination.DASHBOARD },
+                        modifier = modifier,
+                    )
+
+                    HomeDestination.DATA_SOURCE -> DataSourceScreen(
+                        settings = current.settings,
+                        currentToken = viewModel.nightscoutToken(),
+                        syncing = syncing,
+                        lastOutcome = lastOutcome,
+                        nowMillis = nowMillis,
+                        onTest = viewModel::testNightscout,
+                        onSave = { updated, token ->
+                            viewModel.saveNightscoutToken(token)
+                            viewModel.saveSettings(updated)
+                            viewModel.syncNow(updated)
+                        },
+                        onSyncNow = { viewModel.syncNow(current.settings) },
                         modifier = modifier,
                     )
 
