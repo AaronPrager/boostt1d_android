@@ -140,7 +140,12 @@ private fun TopBar() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = BoostSpacing.lg, top = BoostSpacing.xs, bottom = BoostSpacing.xxs),
+            .padding(
+                start = BoostSpacing.lg,
+                end = BoostSpacing.lg,
+                top = BoostSpacing.xs,
+                bottom = BoostSpacing.xxs,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
