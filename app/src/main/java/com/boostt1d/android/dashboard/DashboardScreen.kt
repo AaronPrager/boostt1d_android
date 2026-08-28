@@ -9,19 +9,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Timeline
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Vaccines
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,125 +26,318 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.boostt1d.android.charts.GlucoseChart
+import com.boostt1d.android.charts.glucoseColor
+import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.GlucoseDisplay
 import com.boostt1d.android.data.GlucoseSettings
+import com.boostt1d.android.data.LogState
 import com.boostt1d.android.data.PhotoScaling
+import com.boostt1d.android.data.TodaySoFar
+import com.boostt1d.android.data.TodaySoFarBuilder
 import com.boostt1d.android.data.UserProfile
+import com.boostt1d.android.logs.ScreenScaffold
 import com.boostt1d.android.ui.BoostCard
 import com.boostt1d.android.ui.BoostRadius
 import com.boostt1d.android.ui.BoostSpacing
 import com.boostt1d.android.ui.BoostTheme
+import com.boostt1d.android.ui.Fmt
+import com.boostt1d.android.ui.TrendArrow
 
 /**
- * Where you are now — except there is nothing to show yet.
+ * Where you are now.
  *
- * The iOS dashboard carries current glucose with trend, time in range, insulin on
- * board and today's carbs. All of that needs readings, and this build has no way to
- * receive any: manual entry is the only source and its logging screens are not
- * ported. So the screen states that plainly and offers the one thing that does work.
+ * Every tile is derived from what has actually been logged, and a tile with nothing behind
+ * it says so rather than showing a zero — "0% in range" and "no readings yet" mean very
+ * different things, and only one of them is true on a quiet day.
  */
 @Composable
 fun DashboardScreen(
     profile: UserProfile,
     settings: GlucoseSettings,
+    logs: LogState,
+    nowMillis: Long,
     onOpenProfile: () -> Unit,
+    onAddReading: () -> Unit,
+    onAddEvent: () -> Unit,
+    onOpenBolusCalculator: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = BoostTheme.colors
+    val unit = profile.bgUnit
+    val low = settings.lowGlucose
+    val high = settings.highGlucose
+
+    val dayStart = TodaySoFarBuilder.startOfDay(nowMillis)
+    val today = remember(logs.readings, low, high, nowMillis) {
+        TodaySoFarBuilder.build(logs.entries, low, high, nowMillis = nowMillis)
+    }
+    val latest = logs.latest
+
+    ScreenScaffold(title = "Dashboard", subtitle = null, modifier = modifier) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = BoostSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(BoostSpacing.sm),
+            ) {
+                Avatar(profile, onOpenProfile)
+                Text(
+                    profile.name.ifBlank { "Welcome" },
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        item {
+            CurrentGlucoseCard(
+                latestSgv = latest?.sgv,
+                latestAtMillis = latest?.epochMilliseconds,
+                direction = latest?.direction,
+                unit = unit,
+                low = low,
+                high = high,
+                nowMillis = nowMillis,
+            )
+        }
+
+        item {
+            QuickActions(
+                onAddReading = onAddReading,
+                onAddEvent = onAddEvent,
+                onOpenBolusCalculator = onOpenBolusCalculator,
+            )
+        }
+
+        item { TodayCard(today, logs, dayStart, unit, low, high, nowMillis) }
+
+        if (logs.readings.any { it.epochMilliseconds >= nowMillis - 24 * 60 * 60 * 1000 }) {
+            item {
+                BoostCard {
+                    Text(
+                        "LAST 24 HOURS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textSecondary,
+                    )
+                    GlucoseChart(
+                        entries = logs.entries,
+                        lowMgdl = low,
+                        highMgdl = high,
+                        unit = unit,
+                        windowStartMillis = nowMillis - 24 * 60 * 60 * 1000,
+                        windowEndMillis = nowMillis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CurrentGlucoseCard(
+    latestSgv: Int?,
+    latestAtMillis: Long?,
+    direction: String?,
+    unit: BGUnit,
+    low: Double,
+    high: Double,
+    nowMillis: Long,
 ) {
     val colors = BoostTheme.colors
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.background)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(BoostSpacing.lg),
-        verticalArrangement = Arrangement.spacedBy(BoostSpacing.lg),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(BoostSpacing.sm),
-        ) {
-            Avatar(profile, onClick = onOpenProfile)
+    BoostCard {
+        Text(
+            "GLUCOSE NOW",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.textSecondary,
+        )
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "DASHBOARD",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.textSecondary,
-                )
-                Text(
-                    profile.name.ifBlank { "Welcome" },
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.textPrimary,
-                )
-            }
-        }
-
-        BoostCard {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
-            ) {
-                Icon(
-                    Icons.Filled.Timeline,
-                    contentDescription = null,
-                    tint = colors.textTertiary,
-                    modifier = Modifier.size(20.dp),
-                )
-                Text(
-                    "No readings yet",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.textPrimary,
-                )
-            }
+        if (latestSgv == null || latestAtMillis == null) {
             Text(
-                "You're set up for manual entry, so nothing arrives on its own. Logging and " +
-                    "charts are not built yet — for now this screen stays empty on purpose.",
+                "No readings yet",
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textTertiary,
+            )
+            Text(
+                "You're set up for manual entry, so nothing arrives on its own. Add a reading " +
+                    "and this fills in.",
                 fontSize = 14.sp,
                 color = colors.textSecondary,
             )
+            return@BoostCard
         }
 
-        BoostCard {
+        val value = latestSgv.toDouble()
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                "YOUR TARGET RANGE",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.textSecondary,
-            )
-            Text(
-                "${GlucoseDisplay.format(settings.lowGlucose, profile.bgUnit)} – " +
-                    "${GlucoseDisplay.format(settings.highGlucose, profile.bgUnit)} " +
-                    profile.bgUnit.displayName,
-                fontSize = 22.sp,
+                GlucoseDisplay.format(value, unit),
+                fontSize = 46.sp,
                 fontWeight = FontWeight.Bold,
-                color = colors.inRange,
+                color = glucoseColor(value, low, high),
             )
+            Column(modifier = Modifier.padding(bottom = 10.dp)) {
+                Text(unit.displayName, fontSize = 13.sp, color = colors.textSecondary)
+                TrendArrow.symbol(direction)?.let {
+                    Text(it, fontSize = 18.sp, color = colors.textPrimary)
+                }
+            }
         }
 
-        Box(modifier = Modifier.weight(1f))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(Fmt.ago(latestAtMillis, nowMillis), fontSize = 13.sp, color = colors.textSecondary)
+            TrendArrow.label(direction)?.let {
+                Text("· $it", fontSize = 13.sp, color = colors.textSecondary)
+            }
+        }
 
-        Button(
-            onClick = onOpenProfile,
-            shape = RoundedCornerShape(BoostRadius.md),
-            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-            modifier = Modifier.fillMaxWidth().height(54.dp),
+        // A manual reading is a point in time, not a live feed. Saying so keeps the number
+        // from being read as "current" hours after it was taken.
+        val ageMinutes = (nowMillis - latestAtMillis) / 60_000
+        if (ageMinutes > 60) {
+            Text(
+                "This is the last reading you logged, not a live value.",
+                fontSize = 12.sp,
+                color = colors.textTertiary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TodayCard(
+    today: TodaySoFar,
+    logs: LogState,
+    dayStartMillis: Long,
+    unit: BGUnit,
+    low: Double,
+    high: Double,
+    nowMillis: Long,
+) {
+    val colors = BoostTheme.colors
+    val insulin = logs.insulinSince(dayStartMillis)
+    val carbs = logs.carbsSince(dayStartMillis)
+
+    BoostCard {
+        Text(
+            "TODAY SO FAR",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.textSecondary,
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = BoostSpacing.xxs),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Icon(
-                Icons.Filled.Person,
-                contentDescription = null,
-                modifier = Modifier.padding(end = BoostSpacing.xs).size(20.dp),
+            Stat("Insulin", "${Fmt.units(insulin)} U", colors.insulin)
+            Stat("Carbs", "${Fmt.carbs(carbs)} g", colors.carbs)
+            Stat(
+                "Readings",
+                "${today.readingCount}",
+                colors.textPrimary,
             )
-            Text("Profile", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
+
+        if (!today.hasEnoughData) {
+            Text(
+                if (today.readingCount == 0) {
+                    "No readings today yet."
+                } else {
+                    // Below the threshold the percentages would be noise dressed as a summary.
+                    "${today.readingCount} readings today — not enough to summarise the day yet."
+                },
+                fontSize = 13.sp,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(top = BoostSpacing.xs),
+            )
+            return@BoostCard
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = BoostSpacing.sm),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Stat("Average", today.averageGlucose?.let { GlucoseDisplay.format(it, unit) } ?: "—", colors.textPrimary)
+            Stat("In range", Fmt.percent(today.inRange), colors.inRange)
+            Stat("Low events", "${today.lowEpisodes}", if (today.lowEpisodes > 0) colors.low else colors.textPrimary)
+        }
+
+        if (today.hasBaseline) {
+            val delta = today.averageDelta
+            val inRangeDelta = today.inRangeDelta
+            Text(
+                buildString {
+                    append("Against the same hours on the last ${today.baselineDays} days: ")
+                    delta?.let { append("average ${Fmt.signed(it, unit)} ${unit.displayName}") }
+                    if (delta != null && inRangeDelta != null) append(", ")
+                    inRangeDelta?.let {
+                        val sign = if (it >= 0) "+" else "−"
+                        append("in range $sign${Fmt.percent(kotlin.math.abs(it))}")
+                    }
+                    append(".")
+                },
+                fontSize = 12.sp,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(top = BoostSpacing.xs),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Stat(label: String, value: String, valueColor: Color) {
+    val colors = BoostTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, fontSize = 12.sp, color = colors.textSecondary)
+        Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = valueColor)
+    }
+}
+
+@Composable
+private fun QuickActions(
+    onAddReading: () -> Unit,
+    onAddEvent: () -> Unit,
+    onOpenBolusCalculator: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
+    ) {
+        QuickAction("Reading", Icons.Filled.Add, Modifier.weight(1f), onAddReading)
+        QuickAction("Event", Icons.Filled.Vaccines, Modifier.weight(1f), onAddEvent)
+        QuickAction("Bolus", Icons.Filled.Calculate, Modifier.weight(1f), onOpenBolusCalculator)
+    }
+}
+
+@Composable
+private fun QuickAction(
+    label: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val colors = BoostTheme.colors
+    Column(
+        modifier = modifier
+            .background(colors.surface, RoundedCornerShape(BoostRadius.lg))
+            .clickable(onClick = onClick)
+            .padding(vertical = BoostSpacing.sm),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
     }
 }
 
@@ -160,7 +348,7 @@ private fun Avatar(profile: UserProfile, onClick: () -> Unit) {
 
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .size(44.dp)
             .clip(CircleShape)
             .background(colors.surfaceMuted)
             .clickable(onClick = onClick),
@@ -175,11 +363,10 @@ private fun Avatar(profile: UserProfile, onClick: () -> Unit) {
             )
         } else {
             Text(
-                text = profile.name.trim().take(1).uppercase().ifEmpty { "?" },
-                fontSize = 18.sp,
+                profile.name.trim().take(1).uppercase().ifEmpty { "?" },
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.textSecondary,
-                textAlign = TextAlign.Center,
             )
         }
     }

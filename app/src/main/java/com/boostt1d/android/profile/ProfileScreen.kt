@@ -86,6 +86,7 @@ fun ProfileScreen(
     settings: GlucoseSettings,
     onSave: (UserProfile, GlucoseSettings) -> Unit,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = BoostTheme.colors
     val context = LocalContext.current
@@ -134,7 +135,7 @@ fun ProfileScreen(
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(colors.surface)
             .windowInsetsPadding(WindowInsets.safeDrawing),
@@ -298,7 +299,7 @@ fun ProfileScreen(
 
         BoostDivider()
 
-        Box(modifier = Modifier.padding(BoostSpacing.md)) {
+        Box(modifier = Modifier.padding(start = BoostSpacing.md, end = BoostSpacing.md, top = BoostSpacing.md, bottom = 84.dp)) {
             Button(
                 onClick = {
                     val validationProblem = validate(

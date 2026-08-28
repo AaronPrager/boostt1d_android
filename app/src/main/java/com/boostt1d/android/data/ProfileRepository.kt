@@ -30,6 +30,7 @@ class ProfileRepository(private val context: Context) {
 
     private val profileKey = stringPreferencesKey("user_profile")
     private val settingsKey = stringPreferencesKey("glucose_settings")
+    private val therapyKey = stringPreferencesKey("therapy_profile")
 
     val profile: Flow<UserProfile?> = context.dataStore.data.map { prefs ->
         prefs[profileKey]?.let { decodeOrNull<UserProfile>(it) }
@@ -37,6 +38,19 @@ class ProfileRepository(private val context: Context) {
 
     val settings: Flow<GlucoseSettings> = context.dataStore.data.map { prefs ->
         prefs[settingsKey]?.let { decodeOrNull<GlucoseSettings>(it) } ?: GlucoseSettings()
+    }
+
+    /**
+     * Basal, carb ratio and correction factor. Empty until the user enters them — in a
+     * manual build there is no Nightscout profile to read them from.
+     */
+    val therapy: Flow<TherapyProfile> = context.dataStore.data.map { prefs ->
+        prefs[therapyKey]?.let { decodeOrNull<TherapyProfile>(it) } ?: TherapyProfile()
+    }
+
+    suspend fun saveTherapy(therapy: TherapyProfile) {
+        val stamped = therapy.copy(updatedAtMillis = System.currentTimeMillis())
+        context.dataStore.edit { it[therapyKey] = json.encodeToString(stamped) }
     }
 
     suspend fun saveProfile(profile: UserProfile) {
