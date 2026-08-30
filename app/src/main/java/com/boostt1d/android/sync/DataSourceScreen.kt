@@ -168,7 +168,8 @@ fun DataSourceScreen(
                     shape = RoundedCornerShape(BoostRadius.md),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = colors.primary,
-                        disabledContainerColor = colors.neutral,
+                        disabledContainerColor = colors.surfaceMuted,
+                        disabledContentColor = colors.textTertiary,
                     ),
                     modifier = Modifier.fillMaxWidth().height(48.dp).padding(top = BoostSpacing.xs),
                 ) {

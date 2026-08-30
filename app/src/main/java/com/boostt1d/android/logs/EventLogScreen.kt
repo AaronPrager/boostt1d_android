@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.boostt1d.android.data.EventType
+import com.boostt1d.android.data.LogRepository
 import com.boostt1d.android.data.LogState
 import com.boostt1d.android.data.NightscoutTreatment
 import com.boostt1d.android.ui.BoostCard
@@ -52,6 +53,7 @@ fun EventLogScreen(
     var window by remember { mutableStateOf(LogWindow.WEEK) }
     var showingAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<NightscoutTreatment?>(null) }
+    var pendingEdit by remember { mutableStateOf<NightscoutTreatment?>(null) }
 
     val since = nowMillis - window.millis
     val visible = logs.treatments.filter { it.recordedAtMillis >= since }
@@ -129,12 +131,24 @@ fun EventLogScreen(
             }
         }
 
-        items(visible, key = { it.cacheKey }) { treatment ->
-            TreatmentRow(
-                treatment = treatment,
-                nowMillis = nowMillis,
-                onDelete = { pendingDelete = treatment },
-            )
+        groupByDay(visible) { it.recordedAtMillis }.forEach { (day, rows) ->
+            item(key = "day-$day") {
+                val dayInsulin = rows.sumOf { it.insulin ?: 0.0 }
+                val dayCarbs = rows.sumOf { it.carbs ?: 0.0 }
+                DayHeader(
+                    dayStartMillis = day,
+                    nowMillis = nowMillis,
+                    trailing = "${Fmt.units(dayInsulin)} U · ${Fmt.carbs(dayCarbs)} g",
+                )
+            }
+            items(rows, key = { it.cacheKey }) { treatment ->
+                TreatmentRow(
+                    treatment = treatment,
+                    nowMillis = nowMillis,
+                    onEdit = { pendingEdit = treatment },
+                    onDelete = { pendingDelete = treatment },
+                )
+            }
         }
     }
 
@@ -143,6 +157,21 @@ fun EventLogScreen(
             nowMillis = nowMillis,
             onDismiss = { showingAdd = false },
             onSave = onAddEvent,
+        )
+    }
+
+    pendingEdit?.let { treatment ->
+        AddEventDialog(
+            nowMillis = nowMillis,
+            existing = treatment,
+            onDismiss = { pendingEdit = null },
+            onSave = { type, at, insulin, carbs, notes, duration ->
+                // Replaced rather than mutated: the fingerprint that identifies an
+                // unflagged treatment is built from its own values, so an edited row is a
+                // different row.
+                onDeleteTreatment(treatment.cacheKey)
+                onAddEvent(type, at, insulin, carbs, notes, duration)
+            },
         )
     }
 
@@ -162,6 +191,7 @@ fun EventLogScreen(
 private fun TreatmentRow(
     treatment: NightscoutTreatment,
     nowMillis: Long,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val colors = BoostTheme.colors
@@ -171,6 +201,9 @@ private fun TreatmentRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(colors.surface, RoundedCornerShape(BoostRadius.md))
+            // A downloaded treatment belongs to the site it came from; editing it here
+            // would be overwritten on the next sync without ever reaching Nightscout.
+            .clickable(enabled = treatment.enteredBy == LogRepository.ENTERED_BY_MANUAL, onClick = onEdit)
             .padding(horizontal = BoostSpacing.sm, vertical = BoostSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(BoostSpacing.sm),
@@ -185,7 +218,7 @@ private fun TreatmentRow(
                 color = colors.textPrimary,
             )
             Text(
-                Fmt.dayTime(treatment.recordedAtMillis),
+                Fmt.time(treatment.recordedAtMillis),
                 fontSize = 12.sp,
                 color = colors.textSecondary,
             )

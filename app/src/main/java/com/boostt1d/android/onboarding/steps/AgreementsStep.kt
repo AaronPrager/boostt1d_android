@@ -7,15 +7,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.boostt1d.android.legal.LegalDocumentDialog
+import com.boostt1d.android.legal.LegalText
 import com.boostt1d.android.onboarding.OnboardingDraft
 import com.boostt1d.android.onboarding.OnboardingViewModel
 import com.boostt1d.android.ui.BoostConsentRow
@@ -44,7 +42,7 @@ import com.boostt1d.android.ui.BoostTheme
 @Composable
 fun AgreementsStep(draft: OnboardingDraft, viewModel: OnboardingViewModel) {
     val colors = BoostTheme.colors
-    var document by remember { mutableStateOf<LegalDocument?>(null) }
+    var document by remember { mutableStateOf<LegalText.Document?>(null) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -94,7 +92,7 @@ fun AgreementsStep(draft: OnboardingDraft, viewModel: OnboardingViewModel) {
             onCheckedChange = { value -> viewModel.update { it.copy(agreedDisclaimer = value) } },
             text = "I understand and acknowledge the medical disclaimer.",
             readLabel = "Read the medical disclaimer",
-            onRead = { document = LegalDocument.DISCLAIMER },
+            onRead = { document = LegalText.medicalDisclaimer },
         )
 
         BoostConsentRow(
@@ -102,7 +100,7 @@ fun AgreementsStep(draft: OnboardingDraft, viewModel: OnboardingViewModel) {
             onCheckedChange = { value -> viewModel.update { it.copy(agreedPrivacy = value) } },
             text = "I have read and agree to the Privacy Policy.",
             readLabel = "Read the Privacy Policy",
-            onRead = { document = LegalDocument.PRIVACY },
+            onRead = { document = LegalText.privacyPolicy },
         )
 
         BoostConsentRow(
@@ -110,7 +108,7 @@ fun AgreementsStep(draft: OnboardingDraft, viewModel: OnboardingViewModel) {
             onCheckedChange = { value -> viewModel.update { it.copy(agreedTerms = value) } },
             text = "I have read and agree to the Terms of Use.",
             readLabel = "Read the Terms of Use",
-            onRead = { document = LegalDocument.TERMS },
+            onRead = { document = LegalText.termsOfUse },
         )
 
         BoostDivider()
@@ -125,70 +123,4 @@ fun AgreementsStep(draft: OnboardingDraft, viewModel: OnboardingViewModel) {
     document?.let { doc ->
         LegalDocumentDialog(doc) { document = null }
     }
-}
-
-internal enum class LegalDocument(val title: String) {
-    DISCLAIMER("Medical Disclaimer"),
-    PRIVACY("Privacy Policy"),
-    TERMS("Terms of Use"),
-}
-
-/**
- * The medical disclaimer text is the iOS copy, verbatim — it is the wording the
- * consent refers to, so it cannot be paraphrased for a different platform.
- *
- * Privacy Policy and Terms of Use are placeholders. They must carry the real text
- * before this ships; a consent checkbox over a stub is worse than no checkbox.
- */
-@Composable
-private fun LegalDocumentDialog(document: LegalDocument, onDismiss: () -> Unit) {
-    val colors = BoostTheme.colors
-
-    val sections: List<Pair<String, String>> = when (document) {
-        LegalDocument.DISCLAIMER -> listOf(
-            "Not medical advice" to
-                "BoostT1D does not provide medical advice, diagnosis, or treatment recommendations. It is for informational and educational purposes only. Always consult a qualified healthcare professional before making medical decisions.",
-            "AI-generated content" to
-                "BoostT1D uses AI to generate informational outputs (for example, food photo carbohydrate estimates and trend insights). These outputs may be inaccurate and are not a substitute for professional medical judgment.",
-            "User responsibility" to
-                "You are solely responsible for your health decisions. Do not make changes to medication, dosing, diet, or treatment based only on information shown in the app. Consult a qualified healthcare professional.",
-            "Emergency situations" to
-                "BoostT1D is NOT designed for emergency use. In case of severe hypoglycemia, hyperglycemia, diabetic ketoacidosis (DKA), or any medical emergency, call emergency services (911 in the US) immediately and follow your emergency action plan.",
-            "Healthcare provider consultation" to
-                "Work with a qualified healthcare professional for questions about diagnosis, treatment, or medication. Do not use this app as a substitute for professional care.",
-        )
-        LegalDocument.PRIVACY -> listOf(
-            "Not yet written" to
-                "The Privacy Policy text has not been ported to Android. Before release this must carry the same policy the iOS app presents.",
-        )
-        LegalDocument.TERMS -> listOf(
-            "Not yet written" to
-                "The Terms of Use text has not been ported to Android. Before release this must carry the same terms the iOS app presents.",
-        )
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-        title = { Text(document.title, color = colors.textPrimary) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(BoostSpacing.sm),
-            ) {
-                sections.forEach { (title, body) ->
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            title,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.textPrimary,
-                        )
-                        Text(body, fontSize = 13.sp, color = colors.textSecondary)
-                    }
-                }
-            }
-        },
-        containerColor = colors.surface,
-    )
 }

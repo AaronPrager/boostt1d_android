@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -51,10 +53,15 @@ fun ScreenScaffold(
 ) {
     val colors = BoostTheme.colors
 
+    Box(
+        modifier = modifier.fillMaxSize().background(colors.background),
+        contentAlignment = Alignment.TopCenter,
+    ) {
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(colors.background)
+        modifier = Modifier
+            .widthIn(max = 560.dp)
+            .fillMaxWidth()
+            .fillMaxHeight()
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
         Row(
@@ -91,6 +98,7 @@ fun ScreenScaffold(
             verticalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
             content = content,
         )
+    }
     }
 }
 

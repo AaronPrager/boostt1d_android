@@ -3,6 +3,8 @@ package com.boostt1d.android.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +35,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -128,17 +133,19 @@ fun <T> BoostDropdownField(
     var expanded by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxWidth()) {
+        val currentLabel = selected?.let(optionLabel) ?: placeholder
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(colors.surfaceMuted, RoundedCornerShape(BoostRadius.md))
                 .border(1.dp, colors.border, RoundedCornerShape(BoostRadius.md))
-                .clickable { expanded = true }
+                .clickable(role = Role.DropdownList) { expanded = true }
+                .semantics(mergeDescendants = true) { contentDescription = currentLabel }
                 .padding(horizontal = 12.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = selected?.let(optionLabel) ?: placeholder,
+                text = currentLabel,
                 color = if (selected == null) colors.textTertiary else colors.textPrimary,
                 fontSize = 15.sp,
                 modifier = Modifier.weight(1f),
@@ -190,7 +197,11 @@ fun <T> BoostSegmented(
                         if (isSelected) colors.surface else Color.Transparent,
                         RoundedCornerShape(BoostRadius.sm),
                     )
-                    .clickable { onSelect(option) }
+                    .selectable(
+                        selected = isSelected,
+                        role = Role.RadioButton,
+                        onClick = { onSelect(option) },
+                    )
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -220,7 +231,12 @@ fun BoostConsentRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onCheckedChange(!checked) },
+                .toggleable(
+                    value = checked,
+                    onValueChange = onCheckedChange,
+                    role = Role.Checkbox,
+                )
+                .semantics(mergeDescendants = true) { contentDescription = text },
             horizontalArrangement = Arrangement.spacedBy(BoostSpacing.sm),
         ) {
             Icon(

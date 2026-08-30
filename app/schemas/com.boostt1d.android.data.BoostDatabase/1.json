@@ -1,0 +1,64 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "e84b11a2db62f285ffee3146bdba7324",
+    "entities": [
+      {
+        "tableName": "glucose_readings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`epochMilliseconds` INTEGER NOT NULL, `sgv` INTEGER NOT NULL, `direction` TEXT, `device` TEXT, `noise` INTEGER, `source` TEXT, PRIMARY KEY(`epochMilliseconds`))",
+        "fields": [
+          {
+            "fieldPath": "epochMilliseconds",
+            "columnName": "epochMilliseconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sgv",
+            "columnName": "sgv",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "direction",
+            "columnName": "direction",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "device",
+            "columnName": "device",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "noise",
+            "columnName": "noise",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "epochMilliseconds"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e84b11a2db62f285ffee3146bdba7324')"
+    ]
+  }
+}

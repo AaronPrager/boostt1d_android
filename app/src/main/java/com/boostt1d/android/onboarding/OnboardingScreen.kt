@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -96,9 +97,11 @@ fun OnboardingScreen(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                // Readable column on a tablet while the background still runs to every edge.
+                // Cap first, then fill: filling first would pin the minimum width to the
+                // whole screen and the cap would be ignored on a tablet or in landscape.
                 .widthIn(max = 560.dp)
+                .fillMaxWidth()
+                .fillMaxHeight()
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
             TopBar()
@@ -242,8 +245,11 @@ private fun Footer(
             shape = RoundedCornerShape(BoostRadius.md),
             colors = ButtonDefaults.buttonColors(
                 containerColor = colors.primary,
-                disabledContainerColor = colors.neutral,
-                disabledContentColor = androidx.compose.ui.graphics.Color.White,
+                // Muted surface, not `neutral`: on a dark ground a mid-grey fill is
+                // lighter than everything around it, so a disabled button ends up the
+                // most prominent thing on the screen.
+                disabledContainerColor = colors.surfaceMuted,
+                disabledContentColor = colors.textTertiary,
             ),
             modifier = Modifier.weight(1f).height(52.dp),
         ) {

@@ -130,6 +130,35 @@ class GlucoseSourceTest {
     }
 
     @Test
+    fun `stitching a fortnight of CGM data keeps every distinct moment`() {
+        // 14 days at a 5-minute cadence, which is what a real Nightscout download looks
+        // like. Nothing here should be collapsed: the samples are well outside the
+        // 90-second duplicate window.
+        val fortnight = (0 until 4_032).map {
+            Row(1_700_000_000_000L + it * 5L * 60 * 1000, GlucoseSourceTag.NIGHTSCOUT)
+        }
+
+        val result = stitch(fortnight, preferred = GlucoseSourceTag.NIGHTSCOUT)
+
+        assertEquals(4_032, result.size)
+    }
+
+    @Test
+    fun `duplicate uploads of a fortnight collapse to one series`() {
+        // The same fortnight uploaded twice, a few seconds apart — what happens when a
+        // site has two uploaders running.
+        val base = (0 until 4_032).map {
+            Row(1_700_000_000_000L + it * 5L * 60 * 1000, GlucoseSourceTag.NIGHTSCOUT)
+        }
+        val echo = base.map { Row(it.epoch + 20_000, GlucoseSourceTag.DEXCOM) }
+
+        val result = stitch((base + echo).sortedBy { it.epoch }, preferred = GlucoseSourceTag.NIGHTSCOUT)
+
+        assertEquals(4_032, result.size)
+        assertTrue(result.all { it.source == GlucoseSourceTag.NIGHTSCOUT })
+    }
+
+    @Test
     fun `a manual entry survives when no CGM covers that moment`() {
         // The point of manual entry: it fills gaps the sensor never saw.
         val rows = listOf(

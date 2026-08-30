@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.sp
 import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.EventType
 import com.boostt1d.android.data.GlucoseDisplay
+import com.boostt1d.android.data.GlucoseReadingEntity
+import com.boostt1d.android.data.NightscoutTreatment
 import com.boostt1d.android.ui.BoostDropdownField
 import com.boostt1d.android.ui.BoostFieldLabel
 import com.boostt1d.android.ui.BoostRadius
@@ -48,11 +50,23 @@ fun AddReadingDialog(
     nowMillis: Long,
     onDismiss: () -> Unit,
     onSave: (sgvMgdl: Int, atMillis: Long) -> Unit,
+    existing: GlucoseReadingEntity? = null,
 ) {
     val colors = BoostTheme.colors
-    var text by remember { mutableStateOf("") }
-    var minutesAgo by remember { mutableStateOf(0) }
+    var text by remember {
+        mutableStateOf(
+            existing?.let {
+                GlucoseDisplay.formatInUserUnit(GlucoseDisplay.fromMgdL(it.sgv.toDouble(), unit), unit)
+            } ?: ""
+        )
+    }
+    // Editing keeps the original time unless the user picks a new offset, so correcting a
+    // mistyped number does not silently move when it happened.
+    var minutesAgo by remember { mutableStateOf<Int?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
+
+    val baseMillis = existing?.epochMilliseconds ?: nowMillis
+    val atMillis = minutesAgo?.let { nowMillis - it * 60_000L } ?: baseMillis
 
     val entered = text.toDoubleOrNull()
     val mgdl = entered?.let { GlucoseDisplay.toMgdL(it, unit) }
@@ -60,7 +74,12 @@ fun AddReadingDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = colors.surface,
-        title = { Text("Add a reading", color = colors.textPrimary) },
+        title = {
+            Text(
+                if (existing == null) "Add a reading" else "Edit reading",
+                color = colors.textPrimary,
+            )
+        },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -75,12 +94,8 @@ fun AddReadingDialog(
                 )
 
                 BoostFieldLabel("When")
-                MinutesAgoPicker(minutesAgo) { minutesAgo = it }
-                Text(
-                    Fmt.dayTime(nowMillis - minutesAgo * 60_000L),
-                    fontSize = 13.sp,
-                    color = colors.textSecondary,
-                )
+                MinutesAgoPicker(minutesAgo ?: 0) { minutesAgo = it }
+                Text(Fmt.dayTime(atMillis), fontSize = 13.sp, color = colors.textSecondary)
 
                 problem?.let { Text(it, fontSize = 13.sp, color = colors.low) }
             }
@@ -96,7 +111,7 @@ fun AddReadingDialog(
                         value < 20 || value > 600 ->
                             problem = "That is outside the range a meter can report. Check the number."
                         else -> {
-                            onSave(value, nowMillis - minutesAgo * 60_000L)
+                            onSave(value, atMillis)
                             onDismiss()
                         }
                     }
@@ -128,15 +143,19 @@ fun AddEventDialog(
         notes: String?,
         durationMinutes: Int?,
     ) -> Unit,
+    existing: NightscoutTreatment? = null,
 ) {
     val colors = BoostTheme.colors
-    var eventType by remember { mutableStateOf(EventType.MEAL_BOLUS) }
-    var insulinText by remember { mutableStateOf("") }
-    var carbsText by remember { mutableStateOf("") }
-    var durationText by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
-    var minutesAgo by remember { mutableStateOf(0) }
+    var eventType by remember { mutableStateOf(existing?.eventType ?: EventType.MEAL_BOLUS) }
+    var insulinText by remember { mutableStateOf(existing?.insulin?.let { Fmt.units(it) } ?: "") }
+    var carbsText by remember { mutableStateOf(existing?.carbs?.let { Fmt.carbs(it) } ?: "") }
+    var durationText by remember { mutableStateOf(existing?.duration?.toString() ?: "") }
+    var notes by remember { mutableStateOf(existing?.notes ?: "") }
+    var minutesAgo by remember { mutableStateOf<Int?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
+
+    val baseMillis = existing?.recordedAtMillis?.takeIf { it > 0 } ?: nowMillis
+    val atMillis = minutesAgo?.let { nowMillis - it * 60_000L } ?: baseMillis
 
     val wantsInsulin = eventType in listOf(
         EventType.MEAL_BOLUS, EventType.CORRECTION_BOLUS, EventType.BOLUS,
@@ -149,7 +168,12 @@ fun AddEventDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = colors.surface,
-        title = { Text("Log an event", color = colors.textPrimary) },
+        title = {
+            Text(
+                if (existing == null) "Log an event" else "Edit event",
+                color = colors.textPrimary,
+            )
+        },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -202,12 +226,8 @@ fun AddEventDialog(
                 )
 
                 BoostFieldLabel("When")
-                MinutesAgoPicker(minutesAgo) { minutesAgo = it }
-                Text(
-                    Fmt.dayTime(nowMillis - minutesAgo * 60_000L),
-                    fontSize = 13.sp,
-                    color = colors.textSecondary,
-                )
+                MinutesAgoPicker(minutesAgo ?: 0) { minutesAgo = it }
+                Text(Fmt.dayTime(atMillis), fontSize = 13.sp, color = colors.textSecondary)
 
                 problem?.let { Text(it, fontSize = 13.sp, color = colors.low) }
             }
@@ -237,7 +257,7 @@ fun AddEventDialog(
                         else -> {
                             onSave(
                                 eventType,
-                                nowMillis - minutesAgo * 60_000L,
+                                atMillis,
                                 insulin?.takeIf { it > 0 },
                                 carbs?.takeIf { it > 0 },
                                 notes,

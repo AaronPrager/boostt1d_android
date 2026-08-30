@@ -3,6 +3,8 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
+105 unit tests and 5 instrumented tests, all green.
+
 ## Data layer
 
 - [x] `NightscoutGlucoseEntry` / `NightscoutTreatment` / `TimeValue` wire types
@@ -11,9 +13,10 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 - [x] Room entity, DAO and database for glucose readings
 - [x] Treatment store as one whole-file JSON write (temp file + rename)
 - [x] 14-day retention, enforced on launch rather than on write
-- [ ] Export the Room schema (`exportSchema = true`) and commit it — it is the migration
-      history, and it needs to exist before the first release, not after
-- [ ] Editing an existing reading or treatment (today they can only be added and deleted)
+- [x] Export the Room schema and commit it — `app/schemas/` is the migration history
+- [x] Editing an existing reading or treatment — tap a row you entered. Downloaded rows
+      are not editable, because an edit here would be overwritten on the next sync
+      without ever reaching Nightscout.
 
 ## Logic, ported 1:1 with its tests first
 
@@ -22,8 +25,8 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 - [x] `BolusCalculator` — carb bolus, correction, IOB subtraction, excess insulin
 - [x] `TodaySoFarBuilder` — today against the same clock hours on completed days
 - [x] `GlucoseSourceRank` / `GlucoseSourceStitch` — the order of truth
-- [ ] Split "very high" (>250 mg/dL) out of time-above-range — `VERY_HIGH_MGDL` is
-      defined and unused, so the dashboard currently understates severity
+- [x] Split "very high" (≥250 mg/dL) out of time-above-range — shown as a subset under
+      the three bands rather than a fourth slice that would not total 100
 
 ## Screens
 
@@ -35,31 +38,40 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 - [x] Insulin Doses — basal, carb ratio and correction factor schedules
 - [x] Bolus Calculator
 - [x] About
-- [ ] Group log rows by day — both logs are a flat list, which stops reading well past
-      about fifty entries
-- [ ] Pan and zoom on the chart, and a line for dense series (deliberately dots only
-      while every reading is manual and hours apart)
-- [ ] Profile keeps its own back arrow inside the shell, which no other destination does
+- [x] Group log rows by day, with a per-day summary in the header
+- [x] A line for dense series — decided from the data's median gap, so CGM data is
+      joined and sparse manual points stay as dots
+- [ ] Pan and zoom on the chart
+- [x] Profile uses the same header as every other destination
 
 ## Quality
 
-- [x] 101 unit tests, all green
-- [ ] Instrumented UI tests — there are none; every UI check so far has been by hand
-- [ ] A run with a realistic dataset (14 days of CGM is roughly 4,000 readings) to see
-      whether the list and chart hold up
-- [ ] Dark theme has never been looked at, only written
-- [ ] TalkBack pass — content descriptions are partial
-- [ ] Landscape and tablet layouts unchecked
+- [x] 105 unit tests, all green
+- [x] Instrumented tests — 5, against a real SQLite database
+- [ ] Instrumented *UI* tests — the screens are still only checked by hand
+- [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
+      The chart's filtering and axis maths were recomputing on every frame and are now
+      memoized.
+- [x] Dark theme rendered and fixed — disabled buttons were painted in `neutral`, which
+      is *lighter* than the dark ground, so a disabled button was the brightest control
+      on the screen
+- [x] Screen-reader semantics — consent rows are toggleable, segmented controls and
+      tabs are selectable, dropdowns announce their current value
+- [ ] An actual TalkBack run, listening to it rather than reading the tree
+- [x] Readable-width cap now works — `fillMaxSize()` was pinning the minimum width, so
+      the 560dp cap was silently ignored and fields stretched edge to edge
+- [ ] Landscape is usable but cramped: the header takes half the height. Needs a
+      shorter header in that orientation, not just a width cap.
 
 ## Release blockers
 
-- [ ] **Privacy Policy text.** The consent checkbox in setup links to a stub that says so.
-      A checkbox over a placeholder records agreement to nothing.
-- [ ] **Terms of Use text.** Same.
+- [x] **Privacy Policy text** — ported from iOS, adapted where Android differs
+      (Keystore not Keychain) and where this build has fewer features than iOS
+- [x] **Terms of Use text** — ported from iOS
 - [ ] Play Data safety declaration
 - [ ] Play Health apps declaration
-- [ ] Keep `hideDoseRecommendations` equivalent behaviour — never ship the prompt variant
-      that strips medical disclaimers
+- [ ] Keep `hideDoseRecommendations` equivalent behaviour when AI arrives — nothing to
+      do yet, since this build has no AI path at all
 
 ---
 

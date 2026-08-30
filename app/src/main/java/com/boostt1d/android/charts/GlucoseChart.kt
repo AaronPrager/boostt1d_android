@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -46,14 +47,21 @@ fun GlucoseChart(
     windowStartMillis: Long,
     windowEndMillis: Long,
     modifier: Modifier = Modifier,
-    connectPoints: Boolean = false,
+    /**
+     * Null decides from the data: a series whose median gap is CGM-sized is joined, and
+     * sparse manual points are left as dots. A line between two readings four hours apart
+     * asserts a curve nobody measured.
+     */
+    connectPoints: Boolean? = null,
 ) {
     val colors = BoostTheme.colors
     val measurer = rememberTextMeasurer()
 
-    val visible = entries
-        .filter { it.recordedAtMillis in windowStartMillis..windowEndMillis }
-        .sortedBy { it.recordedAtMillis }
+    val visible = remember(entries, windowStartMillis, windowEndMillis) {
+        entries
+            .filter { it.recordedAtMillis in windowStartMillis..windowEndMillis }
+            .sortedBy { it.recordedAtMillis }
+    }
 
     if (visible.isEmpty()) {
         Box(
@@ -67,14 +75,19 @@ fun GlucoseChart(
 
     // The axis always contains the target band, so the band never sits off-screen when a
     // day's readings happen to be all high or all low.
-    val values = visible.map { it.sgv.toDouble() }
-    val axisMin = minOf(values.min(), lowMgdl) - 20
-    val axisMax = maxOf(values.max(), highMgdl) + 20
+    val axisBounds = remember(visible, lowMgdl, highMgdl) {
+        val values = visible.map { it.sgv.toDouble() }
+        (minOf(values.min(), lowMgdl) - 20) to (maxOf(values.max(), highMgdl) + 20)
+    }
+    val axisMin = axisBounds.first
+    val axisMax = axisBounds.second
 
     // Both ends of a 24-hour window land on the same clock time, so the labels need the
     // day to say anything at all.
     val crossesDay = TodaySoFarBuilder.startOfDay(windowStartMillis) !=
         TodaySoFarBuilder.startOfDay(windowEndMillis)
+
+    val joinPoints = remember(visible, connectPoints) { connectPoints ?: isDenseSeries(visible) }
 
     val gridColor = colors.border
     val bandColor = colors.inRange.copy(alpha = 0.10f)
@@ -114,7 +127,7 @@ fun GlucoseChart(
 
         drawLine(gridColor, Offset(plot.left, plot.bottom), Offset(plot.right, plot.bottom), 1f)
 
-        if (connectPoints && visible.size > 1) {
+        if (joinPoints && visible.size > 1) {
             val path = Path()
             visible.forEachIndexed { index, entry ->
                 val x = xFor(entry.recordedAtMillis)
@@ -167,4 +180,17 @@ fun glucoseColor(mgdl: Double, low: Double, high: Double): Color {
         mgdl > high -> colors.high
         else -> colors.inRange
     }
+}
+
+/**
+ * Whether the readings are close enough together to draw a line through.
+ *
+ * The median gap is used rather than the mean so one long sensor outage does not make a
+ * whole day of five-minute data look sparse.
+ */
+private fun isDenseSeries(entries: List<com.boostt1d.android.data.NightscoutGlucoseEntry>): Boolean {
+    if (entries.size < 10) return false
+    val gaps = entries.zipWithNext { a, b -> b.recordedAtMillis - a.recordedAtMillis }.sorted()
+    val median = gaps[gaps.size / 2]
+    return median <= 15 * 60 * 1000
 }

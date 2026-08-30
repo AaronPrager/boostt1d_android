@@ -86,7 +86,7 @@ interface GlucoseReadingDao {
     suspend fun deleteAll()
 }
 
-@Database(entities = [GlucoseReadingEntity::class], version = 1, exportSchema = false)
+@Database(entities = [GlucoseReadingEntity::class], version = 1, exportSchema = true)
 abstract class BoostDatabase : RoomDatabase() {
     abstract fun glucoseReadingDao(): GlucoseReadingDao
 

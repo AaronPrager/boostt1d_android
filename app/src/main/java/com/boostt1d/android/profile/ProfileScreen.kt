@@ -140,18 +140,16 @@ fun ProfileScreen(
             .background(colors.surface)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(BoostSpacing.md),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
+        // No back arrow: every other destination in the shell is reached and left the
+        // same way, through the bottom bar, and one screen with its own affordance reads
+        // as a screen that works differently.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = BoostSpacing.lg, vertical = BoostSpacing.md),
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = colors.textPrimary,
-                modifier = Modifier.size(24.dp).clickable(onClick = onBack),
-            )
-            Text("Profile", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+            Text("Profile", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+            Text("Units, range and account", fontSize = 14.sp, color = colors.textSecondary)
         }
 
         BoostDivider()

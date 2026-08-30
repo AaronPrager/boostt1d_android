@@ -94,6 +94,34 @@ class GlucoseStatisticsTest {
     }
 
     @Test
+    fun `very high is a subset of above range, not a fourth slice`() {
+        val stats = GlucoseStatistics.calculate(listOf(120.0, 200.0, 300.0, 400.0), low, high)
+
+        // 200 is above range; 300 and 400 are also very high.
+        assertEquals(75.0, stats.timeAboveRange, 0.0001)
+        assertEquals(50.0, stats.timeVeryHigh, 0.0001)
+        assertEquals(
+            100.0,
+            stats.timeInRange + stats.timeAboveRange + stats.timeBelowRange,
+            0.0001,
+        )
+    }
+
+    @Test
+    fun `the very high threshold is inclusive at 250`() {
+        assertEquals(
+            100.0,
+            GlucoseStatistics.calculate(listOf(250.0), low, high).timeVeryHigh,
+            0.0001,
+        )
+        assertEquals(
+            0.0,
+            GlucoseStatistics.calculate(listOf(249.0), low, high).timeVeryHigh,
+            0.0001,
+        )
+    }
+
+    @Test
     fun `a zero average cannot divide by zero`() {
         val stats = GlucoseStatistics.calculate(listOf(0.0, 0.0), low, high)
 

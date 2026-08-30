@@ -19,6 +19,11 @@ data class GlucoseStatistics(
     val timeInRange: Double = 0.0,
     val timeAboveRange: Double = 0.0,
     val timeBelowRange: Double = 0.0,
+    /**
+     * The share of readings above the ADA "very high" threshold. A subset of
+     * [timeAboveRange], not a fourth slice — the three bands still total 100.
+     */
+    val timeVeryHigh: Double = 0.0,
 ) {
     companion object {
         /**
@@ -51,6 +56,7 @@ data class GlucoseStatistics(
             val inRange = values.count { it in low..high }
             val aboveRange = values.count { it > high }
             val belowRange = values.count { it < low }
+            val veryHigh = values.count { it >= GlucoseCacheRules.VERY_HIGH_MGDL }
 
             return GlucoseStatistics(
                 estimatedA1C = estimatedA1C,
@@ -62,6 +68,7 @@ data class GlucoseStatistics(
                 timeInRange = inRange / count * 100,
                 timeAboveRange = aboveRange / count * 100,
                 timeBelowRange = belowRange / count * 100,
+                timeVeryHigh = veryHigh / count * 100,
             )
         }
     }
