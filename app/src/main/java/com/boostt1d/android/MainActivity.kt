@@ -64,6 +64,7 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
     val logs by viewModel.logState.collectAsStateWithLifecycle()
     val syncing by viewModel.syncing.collectAsStateWithLifecycle()
     val lastOutcome by viewModel.lastOutcome.collectAsStateWithLifecycle()
+    val onBoard by viewModel.onBoard.collectAsStateWithLifecycle()
 
     var destination by remember { mutableStateOf(HomeDestination.DASHBOARD) }
     var showingAddReading by remember { mutableStateOf(false) }
@@ -106,13 +107,12 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         profile = current.profile,
                         settings = current.settings,
                         logs = logs,
+                        onBoard = onBoard,
                         nowMillis = nowMillis,
-                        onOpenProfile = { destination = HomeDestination.SETTINGS },
-                        onAddReading = { showingAddReading = true },
-                        onAddEvent = { showingAddEvent = true },
-                        onOpenBolusCalculator = { destination = HomeDestination.BOLUS_CALCULATOR },
                         syncing = syncing,
-                        onSyncNow = { viewModel.syncNow(current.settings) },
+                        onRefresh = { viewModel.syncNow(current.settings) },
+                        onAddReading = { showingAddReading = true },
+                        onOpenHistory = { destination = HomeDestination.BLOOD_GLUCOSE },
                         modifier = modifier,
                     )
 

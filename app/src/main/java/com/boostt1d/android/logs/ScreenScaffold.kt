@@ -44,7 +44,8 @@ import com.boostt1d.android.ui.BoostTheme
  */
 @Composable
 fun ScreenScaffold(
-    title: String,
+    /** Null on a screen that carries its own heading, so the two do not stack up. */
+    title: String?,
     subtitle: String?,
     modifier: Modifier = Modifier,
     onAdd: (() -> Unit)? = null,
@@ -64,6 +65,7 @@ fun ScreenScaffold(
             .fillMaxHeight()
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
+        if (title != null || onAdd != null) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -71,7 +73,9 @@ fun ScreenScaffold(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                title?.let {
+                    Text(it, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                }
                 subtitle?.let { Text(it, fontSize = 14.sp, color = colors.textSecondary) }
             }
 
@@ -86,6 +90,7 @@ fun ScreenScaffold(
                     Text(addLabel, fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp))
                 }
             }
+        }
         }
 
         LazyColumn(

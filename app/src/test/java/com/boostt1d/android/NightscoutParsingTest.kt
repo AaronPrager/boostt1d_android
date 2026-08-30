@@ -1,6 +1,7 @@
 package com.boostt1d.android
 
 import com.boostt1d.android.data.EventType
+import com.boostt1d.android.data.OnBoard
 import com.boostt1d.android.sync.NightscoutService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -193,6 +194,62 @@ class NightscoutParsingTest {
 
         assertEquals(12.0, profile!!.carbRatio.single().value, 0.0001)
         assertEquals(45.0, profile.sensitivity.single().value, 0.0001)
+    }
+
+    @Test
+    fun `insulin on board is read from Loop's nesting`() {
+        val body = """
+            [{"created_at":"2025-08-28T12:00:00.000Z","loop":{"iob":{"iob":2.35},"cob":{"cob":18}}}]
+        """.trimIndent()
+
+        val onBoard = service.parseOnBoard(body)
+
+        assertEquals(2.35, onBoard.insulinUnits!!, 0.0001)
+        assertEquals(18.0, onBoard.carbsGrams!!, 0.0001)
+        assertEquals(1756382400000L, onBoard.asOfMillis)
+    }
+
+    @Test
+    fun `insulin on board is read from the oref lineage's flatter shape`() {
+        val body = """
+            [{"created_at":"2025-08-28T12:00:00.000Z","openaps":{"suggested":{"IOB":1.2,"iob":1.2,"cob":30}}}]
+        """.trimIndent()
+
+        val onBoard = service.parseOnBoard(body)
+
+        assertEquals(1.2, onBoard.insulinUnits!!, 0.0001)
+        assertEquals(30.0, onBoard.carbsGrams!!, 0.0001)
+    }
+
+    @Test
+    fun `the newest devicestatus wins`() {
+        val body = """
+            [
+              {"created_at":"2025-08-28T11:00:00.000Z","loop":{"iob":{"iob":9.9}}},
+              {"created_at":"2025-08-28T12:00:00.000Z","loop":{"iob":{"iob":1.1}}}
+            ]
+        """.trimIndent()
+
+        assertEquals(1.1, service.parseOnBoard(body).insulinUnits!!, 0.0001)
+    }
+
+    @Test
+    fun `a devicestatus with no on-board figures reports nothing`() {
+        val body = """[{"created_at":"2025-08-28T12:00:00.000Z","pump":{"battery":{"percent":80}}}]"""
+
+        assertTrue(service.parseOnBoard(body).isEmpty)
+        assertTrue(service.parseOnBoard("[]").isEmpty)
+        assertTrue(service.parseOnBoard("not json").isEmpty)
+    }
+
+    @Test
+    fun `stale on-board figures are dropped rather than shown`() {
+        val at = 1_756_382_400_000L
+        val fresh = OnBoard(2.0, 20.0, at)
+
+        assertEquals(fresh, OnBoard.freshOrNone(fresh, at + 60_000))
+        // Twenty minutes on, "2 U on board" no longer describes now.
+        assertTrue(OnBoard.freshOrNone(fresh, at + 20 * 60_000).isEmpty)
     }
 
     @Test

@@ -90,6 +90,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _lastOutcome = MutableStateFlow<SyncOutcome?>(null)
     val lastOutcome = _lastOutcome.asStateFlow()
 
+    private val _onBoard = MutableStateFlow(OnBoard.none)
+    val onBoard = _onBoard.asStateFlow()
+
     val logState: StateFlow<LogState> =
         combine(
             logs.readingRows, logs.treatments, repository.therapy, repository.settings,
@@ -147,6 +150,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _syncing.value = true
             _lastOutcome.value = orchestrator.sync(settings)
+
+            // Insulin and carbs on board come from the loop's own devicestatus, not from
+            // anything the app derives. A failure here is not a sync failure — the
+            // readings still arrived.
+            _onBoard.value = runCatching {
+                OnBoard.freshOrNone(
+                    nightscout.fetchOnBoard(settings.nightscoutUrl, credentials.nightscoutToken),
+                    System.currentTimeMillis(),
+                )
+            }.getOrDefault(OnBoard.none)
+
             _syncing.value = false
         }
     }

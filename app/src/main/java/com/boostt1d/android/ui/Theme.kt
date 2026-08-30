@@ -116,6 +116,7 @@ object BoostRadius {
     val md = 10.dp
     val lg = 14.dp
     val xl = 18.dp
+    val pillLike = 999.dp
 }
 
 private val LocalBoostColors = staticCompositionLocalOf { LightBoostColors }

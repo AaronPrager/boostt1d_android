@@ -3,6 +3,7 @@ package com.boostt1d.android.sync
 import com.boostt1d.android.data.GlucoseCacheRules
 import com.boostt1d.android.data.NightscoutGlucoseEntry
 import com.boostt1d.android.data.NightscoutTreatment
+import com.boostt1d.android.data.OnBoard
 import com.boostt1d.android.data.TherapyProfile
 import com.boostt1d.android.data.TimeValue
 import kotlinx.coroutines.Dispatchers
@@ -173,6 +174,56 @@ class NightscoutService(
             // A client-side filter as well, as a safety net for mixed schemas and clock skew.
             parseTreatments(body).filter { treatmentMillis(it) in startMillis..endMillis }
         }
+
+    /**
+     * Insulin and carbs on board, from whatever the loop last published to
+     * `devicestatus`.
+     *
+     * Several uploaders write this and they disagree about where: Loop nests it under
+     * `loop`, the oref lineage under `openaps.suggested` or `openaps.enacted`. All three
+     * are read, newest first, and the first that carries a figure wins.
+     */
+    suspend fun fetchOnBoard(url: String, token: String): OnBoard = withContext(Dispatchers.IO) {
+        val body = firstWorkingStrategy(
+            url, "/api/v1/devicestatus.json", listOf("count" to "24"),
+            NightscoutUrl.therapyStrategies(token),
+        )
+        parseOnBoard(body)
+    }
+
+    internal fun parseOnBoard(body: String): OnBoard {
+        val array = runCatching { json.parseToJsonElement(body.trim()).jsonArray }.getOrNull()
+            ?: return OnBoard.none
+
+        val documents = array.mapNotNull { it as? JsonObject }
+            .sortedByDescending { doc ->
+                parseTimestamp(doc["created_at"]?.jsonPrimitive?.contentOrNull) ?: 0L
+            }
+
+        for (document in documents) {
+            val at = parseTimestamp(document["created_at"]?.jsonPrimitive?.contentOrNull) ?: continue
+
+            val candidates = listOfNotNull(
+                document["loop"] as? JsonObject,
+                (document["openaps"] as? JsonObject)?.get("suggested") as? JsonObject,
+                (document["openaps"] as? JsonObject)?.get("enacted") as? JsonObject,
+            )
+
+            for (candidate in candidates) {
+                // Loop nests IOB one level deeper than the oref lineage does.
+                val iob = candidate["iob"]?.let { element ->
+                    (element as? JsonObject)?.get("iob")?.jsonPrimitive?.doubleOrNull
+                        ?: (element as? kotlinx.serialization.json.JsonPrimitive)?.doubleOrNull
+                }
+                val cob = candidate["cob"]?.let { element ->
+                    (element as? JsonObject)?.get("cob")?.jsonPrimitive?.doubleOrNull
+                        ?: (element as? kotlinx.serialization.json.JsonPrimitive)?.doubleOrNull
+                }
+                if (iob != null || cob != null) return OnBoard(iob, cob, at)
+            }
+        }
+        return OnBoard.none
+    }
 
     /** The therapy settings from `profile.json`, mapped onto the app's own shape. */
     suspend fun fetchTherapyProfile(url: String, token: String): TherapyProfile? =
