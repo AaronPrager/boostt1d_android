@@ -2,7 +2,9 @@ package com.boostt1d.android.logs
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,6 +40,7 @@ import com.boostt1d.android.ui.BoostRadius
 import com.boostt1d.android.ui.BoostSegmented
 import com.boostt1d.android.ui.BoostSoftIcon
 import com.boostt1d.android.ui.BoostSpacing
+import androidx.compose.ui.semantics.Role
 import com.boostt1d.android.ui.BoostTheme
 import com.boostt1d.android.ui.Fmt
 
@@ -50,13 +53,17 @@ fun EventLogScreen(
     modifier: Modifier = Modifier,
 ) {
     val colors = BoostTheme.colors
-    var window by remember { mutableStateOf(LogWindow.WEEK) }
+    // Three days by default: long enough to see a pattern in doses, short enough that
+    // the list is still scannable.
+    var window by remember { mutableStateOf(LogWindow.THREE_DAYS) }
+    var activeTypes by remember { mutableStateOf(EventCategory.filterable.toSet()) }
     var showingAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<NightscoutTreatment?>(null) }
     var pendingEdit by remember { mutableStateOf<NightscoutTreatment?>(null) }
 
     val since = nowMillis - window.millis
-    val visible = logs.treatments.filter { it.recordedAtMillis >= since }
+    val inWindow = logs.treatments.filter { it.recordedAtMillis >= since }
+    val visible = inWindow.filter { EventCategory.of(it) in activeTypes }
     val insulin = visible.sumOf { it.insulin ?: 0.0 }
     val carbs = visible.sumOf { it.carbs ?: 0.0 }
 
@@ -69,10 +76,26 @@ fun EventLogScreen(
     ) {
         item {
             BoostSegmented(
-                options = LogWindow.entries.toList(),
+                options = LogWindow.forEvents,
                 selected = window,
                 optionLabel = { it.label },
                 onSelect = { window = it },
+            )
+        }
+
+        item {
+            TypeFilter(
+                active = activeTypes,
+                counts = inWindow.groupingBy { EventCategory.of(it) }.eachCount(),
+                onToggle = { category ->
+                    // Turning the last one off would show an empty log that looks like
+                    // missing data, so the last active filter cannot be cleared.
+                    activeTypes = if (category in activeTypes) {
+                        (activeTypes - category).ifEmpty { activeTypes }
+                    } else {
+                        activeTypes + category
+                    }
+                },
             )
         }
 
@@ -124,7 +147,7 @@ fun EventLogScreen(
         if (visible.isEmpty()) {
             item {
                 EmptyNote(
-                    "Nothing logged in this window",
+                    if (inWindow.isEmpty()) "Nothing logged in this window" else "Nothing matches those filters",
                     "Doses, meals and events go here. Tap Log an event to add one — this is " +
                         "also what the bolus calculator and, later, the insights will read.",
                 )
@@ -256,5 +279,83 @@ private fun iconFor(eventType: String?): Pair<ImageVector, androidx.compose.ui.g
         EventType.NOTE -> Icons.Filled.Notes to colors.neutral
         EventType.MEAL_BOLUS -> Icons.Filled.LocalDining to colors.insulin
         else -> Icons.Filled.Vaccines to colors.insulin
+    }
+}
+
+/**
+ * How an event is grouped for filtering.
+ *
+ * Carbs are deliberately absent from the filter row: a carb-only row downloaded from
+ * Nightscout belongs to the Food Log, and offering it here as a filter implies the Event
+ * Log is where meals live.
+ */
+enum class EventCategory(val label: String) {
+    INSULIN("Insulin"),
+    TEMP_BASAL("Temp Basal"),
+    EXERCISE("Activity"),
+    OTHER("Other");
+
+    companion object {
+        val filterable = entries.toList()
+
+        fun of(treatment: NightscoutTreatment): EventCategory = when {
+            treatment.eventType == EventType.TEMP_BASAL -> TEMP_BASAL
+            treatment.eventType == EventType.EXERCISE -> EXERCISE
+            (treatment.insulin ?: 0.0) > 0 -> INSULIN
+            else -> OTHER
+        }
+    }
+}
+
+@Composable
+private fun TypeFilter(
+    active: Set<EventCategory>,
+    counts: Map<EventCategory, Int>,
+    onToggle: (EventCategory) -> Unit,
+) {
+    val colors = BoostTheme.colors
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(BoostSpacing.xxs),
+    ) {
+        EventCategory.filterable.forEach { category ->
+            val isActive = category in active
+            val tint = when (category) {
+                EventCategory.INSULIN -> colors.insulin
+                EventCategory.TEMP_BASAL -> colors.high
+                EventCategory.EXERCISE -> colors.report
+                EventCategory.OTHER -> colors.neutral
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(
+                        if (isActive) tint.copy(alpha = 0.14f) else colors.surfaceMuted,
+                        RoundedCornerShape(BoostRadius.md),
+                    )
+                    .selectable(
+                        selected = isActive,
+                        role = Role.Checkbox,
+                        onClick = { onToggle(category) },
+                    )
+                    .padding(vertical = 7.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        category.label,
+                        fontSize = 11.sp,
+                        fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isActive) tint else colors.textTertiary,
+                    )
+                    Text(
+                        "${counts[category] ?: 0}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isActive) colors.textPrimary else colors.textTertiary,
+                    )
+                }
+            }
+        }
     }
 }

@@ -45,13 +45,30 @@ import com.boostt1d.android.ui.BoostSpacing
 import com.boostt1d.android.ui.BoostTheme
 import com.boostt1d.android.ui.Fmt
 
-/** How much history a log or chart is showing. */
-enum class LogWindow(val label: String, val days: Int) {
-    DAY("24h", 1),
-    WEEK("7d", 7),
-    FORTNIGHT("14d", 14);
+/** How much history a log is showing, in whole days as on iOS. */
+enum class LogWindow(val days: Int) {
+    ONE_DAY(1),
+    THREE_DAYS(3),
+    SEVEN_DAYS(7),
+    ONE_MONTH(30);
+
+    val label: String get() = if (days == 30) "1 month" else "$days day" + if (days == 1) "" else "s"
 
     val millis: Long get() = days * 24L * 60 * 60 * 1000
+
+    companion object {
+        /** Readings are capped by the retention window, so a month of them cannot exist. */
+        val forReadings = listOf(ONE_DAY, THREE_DAYS, SEVEN_DAYS)
+
+        /** Events are few enough to keep a month of. */
+        val forEvents = entries.toList()
+    }
+}
+
+/** The BG Log shows either the chart or the readings behind it, not both at once. */
+enum class GlucoseLogTab(val label: String) {
+    CHART("Chart"),
+    DATA("Raw Data"),
 }
 
 @Composable
@@ -66,7 +83,8 @@ fun GlucoseLogScreen(
     modifier: Modifier = Modifier,
 ) {
     val colors = BoostTheme.colors
-    var window by remember { mutableStateOf(LogWindow.DAY) }
+    var window by remember { mutableStateOf(LogWindow.ONE_DAY) }
+    var tab by remember { mutableStateOf(GlucoseLogTab.CHART) }
     var showingAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<GlucoseReadingEntity?>(null) }
     var pendingEdit by remember { mutableStateOf<GlucoseReadingEntity?>(null) }
@@ -84,30 +102,11 @@ fun GlucoseLogScreen(
     ) {
         item {
             BoostSegmented(
-                options = LogWindow.entries.toList(),
+                options = LogWindow.forReadings,
                 selected = window,
                 optionLabel = { it.label },
                 onSelect = { window = it },
             )
-        }
-
-        item {
-            BoostCard {
-                Text(
-                    "GLUCOSE",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.textSecondary,
-                )
-                GlucoseChart(
-                    entries = visible.map { it.toEntry() },
-                    lowMgdl = lowMgdl,
-                    highMgdl = highMgdl,
-                    unit = unit,
-                    windowStartMillis = since,
-                    windowEndMillis = nowMillis,
-                )
-            }
         }
 
         if (visible.isNotEmpty()) {
@@ -115,25 +114,39 @@ fun GlucoseLogScreen(
         }
 
         item {
-            Text(
-                if (visible.isEmpty()) "No readings yet" else "${visible.size} readings",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.textSecondary,
-                modifier = Modifier.padding(top = BoostSpacing.xs),
+            // Chart or the readings behind it, not both: stacked, the list pushed the
+            // chart off the top the moment there was a day's worth of data.
+            BoostSegmented(
+                options = GlucoseLogTab.entries.toList(),
+                selected = tab,
+                optionLabel = { it.label },
+                onSelect = { tab = it },
             )
+        }
+
+        if (tab == GlucoseLogTab.CHART) {
+            item {
+                BoostCard {
+                    GlucoseChart(
+                        entries = visible.map { it.toEntry() },
+                        lowMgdl = lowMgdl,
+                        highMgdl = highMgdl,
+                        unit = unit,
+                        windowStartMillis = since,
+                        windowEndMillis = nowMillis,
+                    )
+                }
+            }
+            return@ScreenScaffold
         }
 
         if (visible.isEmpty()) {
             item {
-                BoostCard {
-                    Text(
-                        "Nothing logged in this window. Tap Add a reading to record one — " +
-                            "your meter number, whenever you took it.",
-                        fontSize = 14.sp,
-                        color = colors.textSecondary,
-                    )
-                }
+                EmptyNote(
+                    "No glucose data",
+                    "No readings found for the selected time range. Tap Add a reading to " +
+                        "record one — your meter number, whenever you took it.",
+                )
             }
         }
 

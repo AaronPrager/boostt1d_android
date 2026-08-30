@@ -194,6 +194,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Erases everything the app holds: profile, settings, credentials, readings and
+     * treatments.
+     *
+     * The Privacy Policy says the app offers this, so it has to exist and has to be
+     * complete — a delete that leaves the Nightscout token in the Keystore is not a
+     * delete. Afterwards the app is back at setup, which is the honest end state.
+     */
+    fun deleteEverything() {
+        viewModelScope.launch {
+            logs.deleteEverything()
+            credentials.clear()
+            repository.clear()
+            _onBoard.value = OnBoard.none
+            _lastOutcome.value = null
+        }
+    }
+
     fun deleteTreatment(cacheKey: String) {
         viewModelScope.launch { logs.deleteTreatment(cacheKey) }
     }

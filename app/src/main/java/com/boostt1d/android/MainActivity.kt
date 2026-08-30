@@ -157,6 +157,10 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         settings = current.settings,
                         onSave = viewModel::save,
                         onBack = { destination = HomeDestination.DASHBOARD },
+                        onDeleteEverything = {
+                            viewModel.deleteEverything()
+                            destination = HomeDestination.DASHBOARD
+                        },
                         modifier = modifier,
                     )
 

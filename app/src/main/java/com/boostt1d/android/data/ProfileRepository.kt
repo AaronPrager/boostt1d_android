@@ -53,6 +53,11 @@ class ProfileRepository(private val context: Context) {
         context.dataStore.edit { it[therapyKey] = json.encodeToString(stamped) }
     }
 
+    /** Removes the profile, settings and therapy values. */
+    suspend fun clear() {
+        context.dataStore.edit { it.clear() }
+    }
+
     suspend fun saveProfile(profile: UserProfile) {
         val stamped = profile.copy(updatedAtEpochMillis = System.currentTimeMillis())
         context.dataStore.edit { it[profileKey] = json.encodeToString(stamped) }

@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -59,6 +60,8 @@ import com.boostt1d.android.data.InsulinTherapyType
 import com.boostt1d.android.data.PhotoScaling
 import com.boostt1d.android.data.UserProfile
 import com.boostt1d.android.onboarding.OnboardingValidation
+import com.boostt1d.android.legal.LegalDocumentDialog
+import com.boostt1d.android.legal.LegalText
 import com.boostt1d.android.ui.BoostConsentRow
 import com.boostt1d.android.ui.BoostDivider
 import com.boostt1d.android.ui.BoostDropdownField
@@ -86,6 +89,7 @@ fun ProfileScreen(
     settings: GlucoseSettings,
     onSave: (UserProfile, GlucoseSettings) -> Unit,
     onBack: () -> Unit,
+    onDeleteEverything: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = BoostTheme.colors
@@ -109,6 +113,8 @@ fun ProfileScreen(
     var highMgdl by remember { mutableStateOf(settings.highGlucose) }
     var problem by remember { mutableStateOf<String?>(null) }
     var showingCountryPicker by remember { mutableStateOf(false) }
+    var showingDeleteConfirmation by remember { mutableStateOf(false) }
+    var legalDocument by remember { mutableStateOf<LegalText.Document?>(null) }
 
     val ageValue = age.toIntOrNull()
     val needsParentGuardian = ageValue != null && AgeSelectionOptions.requiresParentGuardian(ageValue)
@@ -288,11 +294,51 @@ fun ProfileScreen(
                 text = "Email me about new releases and important BoostT1D news.",
             )
 
+            BoostDivider()
+
             Text(
-                "Data source: Manual. Connecting Nightscout, Dexcom or Libre is coming later.",
-                fontSize = 12.sp,
+                "DOCUMENTS",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = colors.textSecondary,
             )
+            listOf(
+                "Privacy Policy" to LegalText.privacyPolicy,
+                "Terms of Use" to LegalText.termsOfUse,
+                "Medical Disclaimer" to LegalText.medicalDisclaimer,
+            ).forEach { (label, document) ->
+                Text(
+                    label,
+                    fontSize = 15.sp,
+                    color = colors.primary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { legalDocument = document }
+                        .padding(vertical = 6.dp),
+                )
+            }
+
+            BoostDivider()
+
+            // The Privacy Policy states the app offers data deletion, so it has to be
+            // here and not only through Android's app-info screen.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.low.copy(alpha = 0.10f), RoundedCornerShape(BoostRadius.md))
+                    .clickable { showingDeleteConfirmation = true }
+                    .padding(BoostSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
+            ) {
+                Icon(
+                    Icons.Filled.DeleteOutline,
+                    contentDescription = null,
+                    tint = colors.low,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text("Delete all my data", fontSize = 15.sp, color = colors.low)
+            }
         }
 
         BoostDivider()
@@ -354,6 +400,41 @@ fun ProfileScreen(
                 Text("Save changes", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
         }
+    }
+
+    if (showingDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showingDeleteConfirmation = false },
+            containerColor = colors.surface,
+            title = { Text("Delete everything?", color = colors.textPrimary) },
+            text = {
+                Text(
+                    "Your profile, settings, connection details, readings and events will " +
+                        "all be removed from this device, and you will start again at setup. " +
+                        "Nothing here is backed up anywhere, so this cannot be undone.",
+                    color = colors.textSecondary,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showingDeleteConfirmation = false
+                        onDeleteEverything()
+                    },
+                    shape = RoundedCornerShape(BoostRadius.md),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.low),
+                ) { Text("Delete everything") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showingDeleteConfirmation = false }) {
+                    Text("Keep my data", color = colors.textSecondary)
+                }
+            },
+        )
+    }
+
+    legalDocument?.let { document ->
+        LegalDocumentDialog(document) { legalDocument = null }
     }
 
     if (showingCountryPicker) {

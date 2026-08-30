@@ -2,13 +2,16 @@ package com.boostt1d.android.bolus
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -25,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.BolusCalculator
+import com.boostt1d.android.data.Config
 import com.boostt1d.android.data.GlucoseDisplay
 import com.boostt1d.android.data.LogState
 import com.boostt1d.android.data.TherapyProfile
@@ -76,7 +80,16 @@ fun BolusCalculatorScreen(
     // low and high already say about where they want to be.
     val targetMgdl = (lowMgdl + highMgdl) / 2
 
-    ScreenScaffold(title = "Bolus Calculator", subtitle = "A dose from your own numbers", modifier = modifier) {
+    // The subtitle has to match what the screen does. With doses withheld it does not
+    // give you a dose, and saying it does would be the wrong promise on the one screen
+    // where the promise matters most.
+    val subtitle = if (Config.HIDE_DOSE_RECOMMENDATIONS) {
+        "How a bolus is worked out"
+    } else {
+        "A dose from your own numbers"
+    }
+
+    ScreenScaffold(title = "Insulin Calculator", subtitle = subtitle, modifier = modifier) {
         if (carbRatio == null) {
             item {
                 EmptyNote(
@@ -152,7 +165,13 @@ fun BolusCalculatorScreen(
             val result = runCatching { BolusCalculator.calculate(input) }
 
             result.onSuccess { output ->
-                item { ResultCard(output, BolusCalculator.missingCorrectionInputs(input)) }
+                item {
+                    if (Config.HIDE_DOSE_RECOMMENDATIONS) {
+                        DoseWithheldNotice()
+                    } else {
+                        ResultCard(output, BolusCalculator.missingCorrectionInputs(input))
+                    }
+                }
             }
             result.onFailure { error ->
                 item {
@@ -289,5 +308,100 @@ private fun DisclaimerCard() {
             fontSize = 12.sp,
             color = colors.textSecondary,
         )
+    }
+}
+
+/**
+ * Shown in place of every dose figure when [Config.HIDE_DOSE_RECOMMENDATIONS] is set.
+ *
+ * No computed result at all — not a rounded one, not a hidden one behind a tap. The
+ * arithmetic still runs and is still tested, because the same figures feed the therapy
+ * review later; it simply is not shown to anyone as a dose to take.
+ */
+@Composable
+private fun DoseWithheldNotice() {
+    val colors = BoostTheme.colors
+
+    Column(verticalArrangement = Arrangement.spacedBy(BoostSpacing.md)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.primary.copy(alpha = 0.10f), RoundedCornerShape(BoostRadius.md))
+                .padding(BoostSpacing.md),
+            horizontalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
+        ) {
+            Icon(
+                Icons.Filled.MedicalServices,
+                contentDescription = null,
+                tint = colors.primary,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(BoostSpacing.xs)) {
+                Text(
+                    "Discuss your doses with your doctor",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary,
+                )
+                Text(
+                    "This version does not calculate a dose. Your insulin doses, and any " +
+                        "changes to them, should be worked out with your healthcare provider.",
+                    fontSize = 12.sp,
+                    color = colors.textSecondary,
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.primary.copy(alpha = 0.05f), RoundedCornerShape(BoostRadius.md))
+                .padding(BoostSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(BoostSpacing.sm),
+        ) {
+            Text(
+                "For education only: how a bolus is calculated",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+            )
+            Text(
+                "These are the standard formulas, shown with named terms rather than your " +
+                    "numbers. Work through them with your care team.",
+                fontSize = 12.sp,
+                color = colors.textSecondary,
+            )
+
+            Config.educationalFormulaSteps.forEach { step ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(BoostSpacing.sm),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .background(colors.primary.copy(alpha = 0.15f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "${step.number}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.primary,
+                        )
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            step.title,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.textPrimary,
+                        )
+                        Text(step.formula, fontSize = 13.sp, color = colors.primary)
+                        Text(step.explanation, fontSize = 12.sp, color = colors.textSecondary)
+                    }
+                }
+            }
+        }
     }
 }

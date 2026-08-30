@@ -103,6 +103,13 @@ class LogRepository(context: Context) {
         replaceTreatments(kept + remote)
     }
 
+    /** Every reading and treatment, gone — including the file behind the treatments. */
+    suspend fun deleteEverything() {
+        dao.deleteAll()
+        _treatments.value = emptyList()
+        withContext(Dispatchers.IO) { writeLock.withLock { storeFile.delete() } }
+    }
+
     suspend fun deleteReading(epochMilliseconds: Long) = dao.delete(epochMilliseconds)
 
     suspend fun readingsBetween(from: Long, to: Long): List<NightscoutGlucoseEntry> =

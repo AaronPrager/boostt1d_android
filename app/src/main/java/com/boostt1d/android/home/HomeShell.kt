@@ -104,7 +104,7 @@ fun HomeShell(
     val menuItems = listOf(
         SubmenuItem("Data Source", "Nightscout or manual entry", Icons.Filled.Cloud, HomeDestination.DATA_SOURCE),
         SubmenuItem("Insulin Doses", "Basal, carb ratio, correction", Icons.Filled.Tune, HomeDestination.THERAPY_PROFILE),
-        SubmenuItem("Bolus Calculator", "Work out a dose", Icons.Filled.Calculate, HomeDestination.BOLUS_CALCULATOR),
+        SubmenuItem("Insulin Calculator", "How a bolus is worked out", Icons.Filled.Calculate, HomeDestination.BOLUS_CALCULATOR),
         SubmenuItem("Profile", "Units, range and account", Icons.Filled.Person, HomeDestination.SETTINGS),
         SubmenuItem("About", "Version and legal", Icons.Filled.Info, HomeDestination.ABOUT),
     )
