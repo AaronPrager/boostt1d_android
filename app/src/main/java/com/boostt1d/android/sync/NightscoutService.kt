@@ -16,6 +16,7 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
@@ -112,6 +113,7 @@ class NightscoutService(
             } catch (e: NightscoutException) {
                 if (e.unauthorized) sawUnauthorized = true else lastMessage = e.message ?: lastMessage
             } catch (e: IOException) {
+                Log.d(TAG, "${'$'}path via ${'$'}{describe(strategy)} -> ${'$'}{e.message}")
                 lastMessage = friendlyError(e)
             }
         }
@@ -274,6 +276,10 @@ class NightscoutService(
             .build()
 
         client.newCall(request).execute().use { response ->
+            // The strategy is named but never the credential itself, so a shared logcat
+            // cannot leak someone's token.
+            Log.d(TAG, "${'$'}path via ${'$'}{describe(strategy)} -> ${'$'}{response.code}")
+
             if (response.code == 401 || response.code == 403) {
                 throw NightscoutException("The site rejected the access token.", unauthorized = true)
             }
@@ -400,6 +406,15 @@ class NightscoutService(
         treatment.mills ?: parseTimestamp(treatment.createdAt ?: treatment.timestamp) ?: 0L
 
     companion object {
+        const val TAG = "BoostNightscout"
+
+        /** Names an auth attempt without ever printing the credential. */
+        fun describe(strategy: NightscoutUrl.AuthStrategy): String = when (strategy) {
+            is NightscoutUrl.AuthStrategy.None -> "no credential"
+            is NightscoutUrl.AuthStrategy.Header -> "${'$'}{strategy.field} header"
+            is NightscoutUrl.AuthStrategy.Query -> "${'$'}{strategy.name} query"
+        }
+
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

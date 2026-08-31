@@ -61,27 +61,46 @@ object NightscoutUrl {
     }
 
     /**
-     * Glucose accepts any of three shapes, because Nightscout deployments differ in
-     * which they honour: the api-secret header, X-API-Key, then a token query parameter.
+     * Nightscout has two different credentials, and they are not interchangeable.
+     *
+     * An **access token** from Admin Tools (`name-a1b2c3d4e5f6`) is sent raw as a `token`
+     * query parameter. Hashing it produces a 401 every time.
+     *
+     * The **API_SECRET** — the site-wide password — is sent as the SHA-1 hex of itself in
+     * an `api-secret` header, and some deployments accept the same value as `X-API-Key`.
+     *
+     * Both are offered because the field cannot tell which one was pasted into it, and
+     * asking the user to know the difference is asking them to debug our request.
+     * Cheapest and most likely first.
      */
     fun glucoseStrategies(token: String): List<AuthStrategy> {
         if (token.isEmpty()) return listOf(AuthStrategy.None)
         val hashed = sha1(token)
         return listOf(
+            AuthStrategy.Query("token", token),
             AuthStrategy.Header("api-secret", hashed),
             AuthStrategy.Header("X-API-Key", hashed),
             AuthStrategy.Query("token", hashed),
+            // A site with authentication disabled reads fine with no credential at all,
+            // and a wrong token should not make it look unreachable.
+            AuthStrategy.None,
         )
     }
 
     /**
-     * Treatments and the therapy profile authenticate only with the api-secret header.
-     * A token that cannot satisfy that will not download them, and the probe reports the
-     * capability unavailable rather than over-promising.
+     * Treatments and the therapy profile.
+     *
+     * An access token carries whatever roles it was granted, so it can read these; the
+     * API_SECRET route is the `api-secret` header, as for glucose.
      */
-    fun therapyStrategies(token: String): List<AuthStrategy> =
-        if (token.isEmpty()) listOf(AuthStrategy.None)
-        else listOf(AuthStrategy.Header("api-secret", sha1(token)))
+    fun therapyStrategies(token: String): List<AuthStrategy> {
+        if (token.isEmpty()) return listOf(AuthStrategy.None)
+        return listOf(
+            AuthStrategy.Query("token", token),
+            AuthStrategy.Header("api-secret", sha1(token)),
+            AuthStrategy.None,
+        )
+    }
 
     /** Query limits sized to the window, matching the iOS caps. */
     fun glucoseQueryLimit(hours: Int): Int {

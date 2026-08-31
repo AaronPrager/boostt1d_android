@@ -59,15 +59,45 @@ class NightscoutUrlTest {
     }
 
     @Test
-    fun `glucose tries three auth shapes, therapy only one`() {
-        // Deployments differ in which header they honour; treatments accept only api-secret.
-        assertEquals(3, NightscoutUrl.glucoseStrategies("secret").size)
-        assertEquals(1, NightscoutUrl.therapyStrategies("secret").size)
+    fun `an access token is sent raw, and tried first`() {
+        // Nightscout access tokens from Admin Tools are NOT hashed. Hashing one returns
+        // 401 every time, which is what made a correctly-configured site look unreachable.
+        val token = "boost-a1b2c3d4e5f6"
+        val first = NightscoutUrl.glucoseStrategies(token).first()
+
+        assertTrue(first is NightscoutUrl.AuthStrategy.Query)
+        assertEquals(token, (first as NightscoutUrl.AuthStrategy.Query).value)
     }
 
     @Test
-    fun `no token means one unauthenticated attempt, not three identical ones`() {
+    fun `the API_SECRET route still sends the SHA-1 in a header`() {
+        val strategies = NightscoutUrl.glucoseStrategies("mysecret")
+        val header = strategies.filterIsInstance<NightscoutUrl.AuthStrategy.Header>()
+
+        assertTrue(header.any { it.field == "api-secret" && it.value == NightscoutUrl.sha1("mysecret") })
+        assertTrue(header.any { it.field == "X-API-Key" })
+    }
+
+    @Test
+    fun `therapy endpoints accept an access token too`() {
+        val token = "boost-a1b2c3d4e5f6"
+        val first = NightscoutUrl.therapyStrategies(token).first()
+
+        assertEquals(token, (first as NightscoutUrl.AuthStrategy.Query).value)
+    }
+
+    @Test
+    fun `a site with authentication off is still readable`() {
+        // A wrong token must not make an open site look unreachable, so an
+        // unauthenticated attempt is always the last resort.
+        assertTrue(NightscoutUrl.glucoseStrategies("whatever").last() is NightscoutUrl.AuthStrategy.None)
+        assertTrue(NightscoutUrl.therapyStrategies("whatever").last() is NightscoutUrl.AuthStrategy.None)
+    }
+
+    @Test
+    fun `no token means one unauthenticated attempt, not several identical ones`() {
         assertEquals(1, NightscoutUrl.glucoseStrategies("").size)
+        assertEquals(1, NightscoutUrl.therapyStrategies("").size)
     }
 
     @Test
