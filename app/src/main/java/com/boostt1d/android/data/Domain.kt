@@ -53,6 +53,21 @@ enum class GlucoseConnectionOption(val displayName: String) {
     @SerialName("libre") LIBRE("FreeStyle Libre"),
     @SerialName("manual") MANUAL("Manual");
 
+    /**
+     * How much history this source will serve, or null when it keeps everything.
+     *
+     * This is the number that makes a missed sync permanent. Dexcom Share holds about a
+     * day; LibreLinkUp's graph endpoint returns about twelve hours however much you ask
+     * for. Nightscout is the user's own server and keeps the lot, so nothing is ever lost
+     * by not syncing — only delayed.
+     */
+    val historyWindowHours: Int?
+        get() = when (this) {
+            DEXCOM -> 24
+            LIBRE -> 12
+            NIGHTSCOUT, MANUAL -> null
+        }
+
     companion object {
         /**
          * What setup offers. Dexcom Share and FreeStyle Libre are not ported yet, and an

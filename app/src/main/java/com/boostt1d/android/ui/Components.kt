@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -40,6 +42,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardOptions
@@ -91,13 +95,38 @@ fun BoostTextField(
     modifier: Modifier = Modifier,
     keyboardType: KeyboardType = KeyboardType.Text,
     singleLine: Boolean = true,
+    /**
+     * Masks the value and offers a reveal toggle. For anything that grants access to
+     * someone's data: a field rendering a token in clear text puts it in every
+     * screenshot, screen recording and accessibility dump of that screen.
+     */
+    isSecret: Boolean = false,
 ) {
     val colors = BoostTheme.colors
+    var revealed by remember { mutableStateOf(false) }
+
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         placeholder = { Text(placeholder, color = colors.textTertiary) },
         singleLine = singleLine,
+        visualTransformation = if (isSecret && !revealed) {
+            PasswordVisualTransformation()
+        } else {
+            VisualTransformation.None
+        },
+        trailingIcon = if (!isSecret) null else {
+            {
+                Icon(
+                    imageVector = if (revealed) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    contentDescription = if (revealed) "Hide token" else "Show token",
+                    tint = colors.textTertiary,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable { revealed = !revealed },
+                )
+            }
+        },
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         shape = RoundedCornerShape(BoostRadius.md),
         colors = OutlinedTextFieldDefaults.colors(

@@ -1,5 +1,10 @@
 package com.boostt1d.android.sync
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -7,20 +12,32 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.boostt1d.android.background.BatteryExemption
+import com.boostt1d.android.background.SyncReminders
 import com.boostt1d.android.data.GlucoseConnectionOption
 import com.boostt1d.android.data.GlucoseSettings
 import com.boostt1d.android.logs.EmptyNote
@@ -178,6 +195,10 @@ fun DataSourceScreen(
             }
         }
 
+        if (settings.connection != GlucoseConnectionOption.MANUAL) {
+            item { BackgroundSyncCard() }
+        }
+
         if (settings.connection == GlucoseConnectionOption.MANUAL) {
             item {
                 EmptyNote(
@@ -217,5 +238,106 @@ private fun SyncOutcomeLine(outcome: SyncOutcome) {
         horizontalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
     ) {
         Text(text, fontSize = 13.sp, color = tint)
+    }
+}
+
+/**
+ * Whether background sync can actually run.
+ *
+ * Both of these fail silently. Without notification permission the stale reminder is
+ * simply never seen; under battery optimisation the periodic work is deferred for hours.
+ * Neither shows an error anywhere, so the only way a person finds out is by losing
+ * readings — which is exactly the thing the reminder exists to prevent.
+ */
+@Composable
+private fun BackgroundSyncCard() {
+    val colors = BoostTheme.colors
+    val context = LocalContext.current
+
+    var canNotify by remember { mutableStateOf(SyncReminders.canPost(context)) }
+    var isExempt by remember { mutableStateOf(BatteryExemption.isExempt(context)) }
+
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> canNotify = granted }
+
+    // Re-checked on resume: the battery screen is the system's, so the app only learns the
+    // answer when it comes back.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                canNotify = SyncReminders.canPost(context)
+                isExempt = BatteryExemption.isExempt(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    BoostCard {
+        Text(
+            "BACKGROUND SYNC",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.textSecondary,
+        )
+        Text(
+            "BoostT1D syncs about every fifteen minutes while it is closed. Android may " +
+                "delay that, so it also warns you before readings fall out of your CGM's " +
+                "history — both of these have to be allowed for that warning to arrive.",
+            fontSize = 13.sp,
+            color = colors.textSecondary,
+        )
+
+        PermissionRow(
+            label = "Notifications",
+            granted = canNotify,
+            actionLabel = "Allow",
+            onAction = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            },
+        )
+
+        PermissionRow(
+            label = "Run without battery restrictions",
+            granted = isExempt,
+            actionLabel = "Open settings",
+            onAction = { BatteryExemption.openSettings(context) },
+        )
+    }
+}
+
+@Composable
+private fun PermissionRow(
+    label: String,
+    granted: Boolean,
+    actionLabel: String,
+    onAction: () -> Unit,
+) {
+    val colors = BoostTheme.colors
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = BoostSpacing.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
+    ) {
+        Icon(
+            if (granted) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
+            contentDescription = null,
+            tint = if (granted) colors.inRange else colors.high,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(label, fontSize = 14.sp, color = colors.textPrimary, modifier = Modifier.weight(1f))
+        if (!granted) {
+            Text(
+                actionLabel,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.primary,
+                modifier = Modifier.clickable(onClick = onAction),
+            )
+        }
     }
 }

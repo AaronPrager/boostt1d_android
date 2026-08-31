@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.boostt1d.android.background.SyncReminders
+import com.boostt1d.android.background.SyncScheduler
 import com.boostt1d.android.sync.NightscoutConnectionReport
 import com.boostt1d.android.sync.NightscoutService
 import com.boostt1d.android.sync.SyncOrchestrator
@@ -121,6 +123,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // rather than waiting to be asked.
             val settings = repository.settings.first()
             if (settings.connection == GlucoseConnectionOption.NIGHTSCOUT) syncNow(settings)
+
+            // Background sync follows the source: a manual setup should not be waking the
+            // device every fifteen minutes to fetch nothing.
+            SyncScheduler.applyFor(application, settings.connection)
+            SyncReminders.ensureChannel(application)
         }
     }
 
@@ -132,7 +139,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun saveSettings(settings: GlucoseSettings) {
-        viewModelScope.launch { repository.saveSettings(settings) }
+        viewModelScope.launch {
+            repository.saveSettings(settings)
+            SyncScheduler.applyFor(getApplication(), settings.connection)
+        }
     }
 
     fun saveNightscoutToken(token: String) {
@@ -204,6 +214,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun deleteEverything() {
         viewModelScope.launch {
+            SyncScheduler.cancel(getApplication())
             logs.deleteEverything()
             credentials.clear()
             repository.clear()

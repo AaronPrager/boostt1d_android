@@ -91,6 +91,7 @@ fun ConnectionFields(
                         value = nightscoutToken,
                         onValueChange = onTokenChange,
                         placeholder = "From your Nightscout Admin Tools",
+                        isSecret = true,
                     )
                     Text(
                         "Create a read-only token in Nightscout under Admin Tools. Without one " +
