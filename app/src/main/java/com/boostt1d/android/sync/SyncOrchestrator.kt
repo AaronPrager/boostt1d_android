@@ -41,9 +41,50 @@ class SyncOrchestrator(
     private val logs: LogRepository,
     private val profiles: ProfileRepository,
     private val credentials: CredentialStore,
+    private val dexcom: DexcomShareService = DexcomShareService(),
 ) {
-    suspend fun sync(settings: GlucoseSettings, nowMillis: Long = System.currentTimeMillis()): SyncOutcome {
-        if (settings.connection != GlucoseConnectionOption.NIGHTSCOUT) return SyncOutcome.NotConfigured
+    suspend fun sync(settings: GlucoseSettings, nowMillis: Long = System.currentTimeMillis()): SyncOutcome =
+        when (settings.connection) {
+            GlucoseConnectionOption.NIGHTSCOUT -> syncNightscout(settings, nowMillis)
+            GlucoseConnectionOption.DEXCOM -> syncDexcom(settings, nowMillis)
+            else -> SyncOutcome.NotConfigured
+        }
+
+    /**
+     * Dexcom Share serves readings and nothing else — no treatments, no therapy settings.
+     * Those stay whatever the user entered by hand, which is why the outcome names them
+     * as unavailable rather than reporting zero of each.
+     */
+    private suspend fun syncDexcom(settings: GlucoseSettings, nowMillis: Long): SyncOutcome {
+        val username = settings.dexcomUsername.ifBlank { return SyncOutcome.NotConfigured }
+        val password = credentials.dexcomPassword.ifBlank { return SyncOutcome.NotConfigured }
+
+        val entries = try {
+            // Share ignores requests past its own window, so asking for a day is asking
+            // for everything it has.
+            dexcom.fetchGlucose(username, password, settings.dexcomRegion, minutes = 1440)
+        } catch (e: DexcomShareException.InvalidCredentials) {
+            return SyncOutcome.Failed(e.message ?: "Dexcom rejected those details.", unauthorized = true)
+        } catch (e: DexcomShareException) {
+            return SyncOutcome.Failed(e.message ?: "Could not reach Dexcom Share.", unauthorized = false)
+        } catch (e: IOException) {
+            return SyncOutcome.Failed(NightscoutService.friendlyError(e), unauthorized = false)
+        }
+
+        logs.upsertRemoteReadings(entries, GlucoseSourceTag.DEXCOM)
+        logs.trimHistory(nowMillis)
+        profiles.saveSettings(settings.copy(lastSyncMillis = nowMillis))
+
+        return SyncOutcome.Success(
+            readings = entries.size,
+            treatments = 0,
+            therapyUpdated = false,
+            // Not a failure, a fact about the source: Share has no events to give.
+            skipped = listOf("events and insulin doses (Dexcom Share provides readings only)"),
+        )
+    }
+
+    private suspend fun syncNightscout(settings: GlucoseSettings, nowMillis: Long): SyncOutcome {
         val url = settings.nightscoutUrl.ifBlank { return SyncOutcome.NotConfigured }
         val token = credentials.nightscoutToken
 

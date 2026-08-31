@@ -167,12 +167,14 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                     HomeDestination.DATA_SOURCE -> DataSourceScreen(
                         settings = current.settings,
                         currentToken = viewModel.nightscoutToken(),
+                        currentDexcomPassword = viewModel.dexcomPassword(),
                         syncing = syncing,
                         lastOutcome = lastOutcome,
                         nowMillis = nowMillis,
                         onTest = viewModel::testNightscout,
-                        onSave = { updated, token ->
-                            viewModel.saveNightscoutToken(token)
+                        onTestDexcom = viewModel::testDexcom,
+                        onSave = { updated, token, dexcomPassword ->
+                            viewModel.saveCredentials(token, dexcomPassword)
                             viewModel.saveSettings(updated)
                             viewModel.syncNow(updated)
                         },

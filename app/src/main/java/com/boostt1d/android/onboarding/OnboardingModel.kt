@@ -5,6 +5,7 @@ import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.GlucoseConnectionOption
 import com.boostt1d.android.data.GlucoseDisplay
 import com.boostt1d.android.data.InsulinTherapyType
+import com.boostt1d.android.sync.DexcomRegion
 import com.boostt1d.android.sync.NightscoutUrl
 
 /**
@@ -44,6 +45,9 @@ data class OnboardingDraft(
     val connection: GlucoseConnectionOption = GlucoseConnectionOption.MANUAL,
     val nightscoutUrl: String = "",
     val nightscoutToken: String = "",
+    val dexcomUsername: String = "",
+    val dexcomPassword: String = "",
+    val dexcomRegion: DexcomRegion = DexcomRegion.US,
     val photoBase64: String? = null,
     val bgUnit: BGUnit = BGUnit.MGDL,
     /** Stored in mg/dL whatever the user is reading, exactly as on iOS. */
@@ -103,7 +107,9 @@ object OnboardingValidation {
             // but no treatments or therapy settings, which is most of what the app reads.
             GlucoseConnectionOption.NIGHTSCOUT ->
                 draft.nightscoutUrl.isNotBlank() && draft.nightscoutToken.isNotBlank()
-            // Dexcom and Libre need credentials this build does not collect.
+            GlucoseConnectionOption.DEXCOM ->
+                draft.dexcomUsername.isNotBlank() && draft.dexcomPassword.isNotBlank()
+            // Libre needs credentials this build does not collect.
             else -> false
         }
 

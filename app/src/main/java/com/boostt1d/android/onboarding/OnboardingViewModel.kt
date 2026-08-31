@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.boostt1d.android.data.Countries
 import com.boostt1d.android.data.CredentialStore
 import com.boostt1d.android.data.GlucoseConnectionOption
+import com.boostt1d.android.sync.DexcomShareService
 import com.boostt1d.android.sync.NightscoutService
 import com.boostt1d.android.sync.NightscoutUrl
 import com.boostt1d.android.data.GlucoseDisplay
@@ -29,6 +30,7 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
     private val repository = ProfileRepository(application)
     private val credentials = CredentialStore(application)
     private val nightscout = NightscoutService()
+    private val dexcom = DexcomShareService()
 
     var step by mutableStateOf(OnboardingStep.PERSONAL_INFO)
         private set
@@ -99,19 +101,48 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun testNightscout() {
         if (testingConnection) return
-        val url = draft.nightscoutUrl.trim()
-        if (url.isEmpty()) return
 
         viewModelScope.launch {
             testingConnection = true
             connectionTestResult = null
-            val report = runCatching {
-                nightscout.testConnection(url, draft.nightscoutToken.trim())
-            }.getOrNull()
 
-            connectionTestSucceeded = report?.glucoseAvailable
-            connectionTestResult = report?.message(hasToken = draft.nightscoutToken.isNotBlank())
-                ?: "Could not reach the site. Check the address and your connection."
+            when (draft.connection) {
+                GlucoseConnectionOption.NIGHTSCOUT -> {
+                    val url = draft.nightscoutUrl.trim()
+                    if (url.isEmpty()) {
+                        testingConnection = false
+                        return@launch
+                    }
+                    val report = runCatching {
+                        nightscout.testConnection(url, draft.nightscoutToken.trim())
+                    }.getOrNull()
+                    connectionTestSucceeded = report?.glucoseAvailable
+                    connectionTestResult = report?.message(hasToken = draft.nightscoutToken.isNotBlank())
+                        ?: "Could not reach the site. Check the address and your connection."
+                }
+
+                GlucoseConnectionOption.DEXCOM -> {
+                    // A login is the only honest test: Share has no status endpoint, and
+                    // anything short of signing in would pass for a wrong region.
+                    val result = runCatching {
+                        dexcom.login(
+                            draft.dexcomUsername.trim(),
+                            draft.dexcomPassword,
+                            draft.dexcomRegion,
+                        )
+                    }
+                    connectionTestSucceeded = result.isSuccess
+                    connectionTestResult = if (result.isSuccess) {
+                        "Signed in to Dexcom Share. Readings will start arriving on the next sync."
+                    } else {
+                        result.exceptionOrNull()?.message
+                            ?: "Could not sign in to Dexcom Share."
+                    }
+                }
+
+                else -> Unit
+            }
+
             testingConnection = false
         }
     }
@@ -216,11 +247,21 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
             } else {
                 ""
             },
+            dexcomUsername = if (draft.connection == GlucoseConnectionOption.DEXCOM) {
+                draft.dexcomUsername.trim()
+            } else {
+                ""
+            },
+            dexcomRegion = draft.dexcomRegion,
         )
 
-        // The token goes to encrypted storage, never into the settings blob.
-        if (draft.connection == GlucoseConnectionOption.NIGHTSCOUT) {
-            credentials.nightscoutToken = draft.nightscoutToken.trim()
+        // Credentials go to encrypted storage, never into the settings blob.
+        when (draft.connection) {
+            GlucoseConnectionOption.NIGHTSCOUT ->
+                credentials.nightscoutToken = draft.nightscoutToken.trim()
+            GlucoseConnectionOption.DEXCOM ->
+                credentials.dexcomPassword = draft.dexcomPassword
+            else -> Unit
         }
 
         // iOS also POSTs demographics to the backend here when the user opted into the

@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import com.boostt1d.android.background.SyncReminders
 import com.boostt1d.android.background.SyncScheduler
+import com.boostt1d.android.sync.DexcomRegion
+import com.boostt1d.android.sync.DexcomShareService
 import com.boostt1d.android.sync.NightscoutConnectionReport
 import com.boostt1d.android.sync.NightscoutService
 import com.boostt1d.android.sync.SyncOrchestrator
@@ -83,6 +85,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val credentials = CredentialStore(application)
     private val nightscout = NightscoutService()
+    private val dexcom = DexcomShareService()
     private val orchestrator = SyncOrchestrator(nightscout, logs, repository, credentials)
 
     /** Non-null while a sync is running, so the UI can show it without guessing. */
@@ -145,11 +148,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveNightscoutToken(token: String) {
-        credentials.nightscoutToken = token
+    fun saveCredentials(nightscoutToken: String, dexcomPassword: String) {
+        credentials.nightscoutToken = nightscoutToken
+        credentials.dexcomPassword = dexcomPassword
     }
 
     fun nightscoutToken(): String = credentials.nightscoutToken
+
+    fun dexcomPassword(): String = credentials.dexcomPassword
+
+    /**
+     * A Dexcom login is the only honest test — Share has no status endpoint, and anything
+     * short of signing in would pass for a wrong region.
+     */
+    suspend fun testDexcom(username: String, password: String, region: DexcomRegion): Result<Unit> =
+        runCatching { dexcom.login(username, password, region) }.map { }
 
     suspend fun testNightscout(url: String, token: String): NightscoutConnectionReport =
         nightscout.testConnection(url, token)

@@ -40,6 +40,7 @@ import com.boostt1d.android.background.BatteryExemption
 import com.boostt1d.android.background.SyncReminders
 import com.boostt1d.android.data.GlucoseConnectionOption
 import com.boostt1d.android.data.GlucoseSettings
+import com.boostt1d.android.sync.DexcomRegion
 import com.boostt1d.android.logs.EmptyNote
 import com.boostt1d.android.logs.ScreenScaffold
 import com.boostt1d.android.ui.BoostCard
@@ -60,11 +61,13 @@ import kotlinx.coroutines.launch
 fun DataSourceScreen(
     settings: GlucoseSettings,
     currentToken: String,
+    currentDexcomPassword: String,
     syncing: Boolean,
     lastOutcome: SyncOutcome?,
     nowMillis: Long,
     onTest: suspend (String, String) -> NightscoutConnectionReport,
-    onSave: (GlucoseSettings, String) -> Unit,
+    onTestDexcom: suspend (String, String, DexcomRegion) -> Result<Unit>,
+    onSave: (GlucoseSettings, String, String) -> Unit,
     onSyncNow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -74,13 +77,19 @@ fun DataSourceScreen(
     var connection by remember { mutableStateOf(settings.connection) }
     var url by remember { mutableStateOf(settings.nightscoutUrl) }
     var token by remember { mutableStateOf(currentToken) }
+    var dexcomUsername by remember { mutableStateOf(settings.dexcomUsername) }
+    var dexcomPassword by remember { mutableStateOf(currentDexcomPassword) }
+    var dexcomRegion by remember { mutableStateOf(settings.dexcomRegion) }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testSucceeded by remember { mutableStateOf<Boolean?>(null) }
 
     val dirty = connection != settings.connection ||
         url.trim() != settings.nightscoutUrl ||
-        token.trim() != currentToken
+        token.trim() != currentToken ||
+        dexcomUsername.trim() != settings.dexcomUsername ||
+        dexcomPassword != currentDexcomPassword ||
+        dexcomRegion != settings.dexcomRegion
 
     ScreenScaffold(title = "Data Source", subtitle = "Where readings come from", modifier = modifier) {
         item {
@@ -141,17 +150,38 @@ fun DataSourceScreen(
                     connection = connection,
                     nightscoutUrl = url,
                     nightscoutToken = token,
+                    dexcomUsername = dexcomUsername,
+                    dexcomPassword = dexcomPassword,
+                    dexcomRegion = dexcomRegion,
                     onConnectionChange = { connection = it; testResult = null },
                     onUrlChange = { url = it; testResult = null },
                     onTokenChange = { token = it; testResult = null },
+                    onDexcomUsernameChange = { dexcomUsername = it; testResult = null },
+                    onDexcomPasswordChange = { dexcomPassword = it; testResult = null },
+                    onDexcomRegionChange = { dexcomRegion = it; testResult = null },
                     onTest = {
                         scope.launch {
                             testing = true
                             testResult = null
-                            val report = runCatching { onTest(url.trim(), token.trim()) }.getOrNull()
-                            testSucceeded = report?.glucoseAvailable
-                            testResult = report?.message(hasToken = token.isNotBlank())
-                                ?: "Could not reach the site. Check the address and your connection."
+
+                            if (connection == GlucoseConnectionOption.DEXCOM) {
+                                val result = onTestDexcom(
+                                    dexcomUsername.trim(), dexcomPassword, dexcomRegion,
+                                )
+                                testSucceeded = result.isSuccess
+                                testResult = if (result.isSuccess) {
+                                    "Signed in to Dexcom Share. Readings will arrive on the next sync."
+                                } else {
+                                    result.exceptionOrNull()?.message
+                                        ?: "Could not sign in to Dexcom Share."
+                                }
+                            } else {
+                                val report = runCatching { onTest(url.trim(), token.trim()) }.getOrNull()
+                                testSucceeded = report?.glucoseAvailable
+                                testResult = report?.message(hasToken = token.isNotBlank())
+                                    ?: "Could not reach the site. Check the address and your connection."
+                            }
+
                             testing = false
                         }
                     },
@@ -170,6 +200,12 @@ fun DataSourceScreen(
                                 } else {
                                     ""
                                 },
+                                dexcomUsername = if (connection == GlucoseConnectionOption.DEXCOM) {
+                                    dexcomUsername.trim()
+                                } else {
+                                    ""
+                                },
+                                dexcomRegion = dexcomRegion,
                                 // A source change invalidates "last synced": the old
                                 // timestamp described a different source.
                                 lastSyncMillis = if (connection == settings.connection) {
@@ -179,6 +215,7 @@ fun DataSourceScreen(
                                 },
                             ),
                             token.trim(),
+                            dexcomPassword,
                         )
                     },
                     enabled = dirty,

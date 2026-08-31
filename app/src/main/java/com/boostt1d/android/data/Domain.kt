@@ -1,5 +1,6 @@
 package com.boostt1d.android.data
 
+import com.boostt1d.android.sync.DexcomRegion
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -73,7 +74,7 @@ enum class GlucoseConnectionOption(val displayName: String) {
          * What setup offers. Dexcom Share and FreeStyle Libre are not ported yet, and an
          * option that cannot work is worse than one that is not shown.
          */
-        val selectableInThisBuild = listOf(NIGHTSCOUT, MANUAL)
+        val selectableInThisBuild = listOf(NIGHTSCOUT, DEXCOM, MANUAL)
     }
 }
 
@@ -103,6 +104,10 @@ data class GlucoseSettings(
     val nightscoutUrl: String = "",
     /** When the last successful sync finished, so staleness can be shown honestly. */
     val lastSyncMillis: Long = 0L,
+    /** Dexcom Share account name or id. The password lives in [CredentialStore]. */
+    val dexcomUsername: String = "",
+    /** Share is regional and the hosts do not federate, so this is not a formality. */
+    val dexcomRegion: DexcomRegion = DexcomRegion.US,
 ) {
     val isManualMode: Boolean get() = connection == GlucoseConnectionOption.MANUAL
 

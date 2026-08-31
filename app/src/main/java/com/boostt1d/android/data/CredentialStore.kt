@@ -45,9 +45,19 @@ class CredentialStore(context: Context) {
             }.apply()
         }
 
+    /** The Dexcom Share account password. Same reasoning as the Nightscout token. */
+    var dexcomPassword: String
+        get() = prefs.getString(KEY_DEXCOM_PASSWORD, "").orEmpty()
+        set(value) {
+            prefs.edit().apply {
+                if (value.isEmpty()) remove(KEY_DEXCOM_PASSWORD) else putString(KEY_DEXCOM_PASSWORD, value)
+            }.apply()
+        }
+
     fun clear() = prefs.edit().clear().apply()
 
     private companion object {
         const val KEY_NIGHTSCOUT_TOKEN = "nightscout_token"
+        const val KEY_DEXCOM_PASSWORD = "dexcom_password"
     }
 }
