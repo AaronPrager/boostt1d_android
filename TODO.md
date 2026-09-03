@@ -89,6 +89,13 @@ have never met a live account.
 - [x] Source stitching at read time, so switching source never hides stored history
 - [x] Token in EncryptedSharedPreferences, never in the settings blob, masked on screen
 - [x] **Verified against a real site** — 23 readings, 11 events and insulin doses came down
+- [x] **Verified value-for-value against the test instance** (`boostt1d.nightscoutpro.com`,
+      90 days of synthetic data): latest reading, 24h statistics (average, GMI, CV, all
+      four range bands), 3-day event totals, today's individual boluses, and the full
+      basal / carb-ratio / ISF schedules all match the server exactly; Room holds 4,031
+      rows, precisely the 14-day cap, every one tagged `nightscout`
+- [x] Sync fires the moment a remote source is configured, not only at launch — a fresh
+      setup used to land on an empty dashboard with no sync until the app was restarted
 - [x] A site with years of history is never asked for more than the retention window —
       `hoursToFetch` caps a first sync at 14 days and a routine one at the gap since the
       newest stored reading, plus an hour of overlap

@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import com.boostt1d.android.background.SyncReminders
@@ -125,16 +127,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // for a month should not need a new reading before it prunes the old ones.
             logs.trimHistory(System.currentTimeMillis())
 
-            // Sync on launch. A CGM's history window is a hard loss boundary — readings
-            // older than it are gone for good — so the app catches up the moment it can
-            // rather than waiting to be asked.
-            val settings = repository.settings.first()
-            if (settings.connection == GlucoseConnectionOption.NIGHTSCOUT) syncNow(settings)
-
-            // Background sync follows the source: a manual setup should not be waking the
-            // device every fifteen minutes to fetch nothing.
-            SyncScheduler.applyFor(application, settings.connection)
             SyncReminders.ensureChannel(application)
+        }
+
+        // Sync whenever the source *becomes* remote — at launch, and the moment setup or
+        // the Data Source screen switches it. A one-shot check at launch missed the case
+        // that matters most: someone who has just connected their site, looking at an
+        // empty dashboard with no sync until they happen to restart the app.
+        //
+        // A CGM's history window is a hard loss boundary, so catching up the instant a
+        // source is configured is not a nicety.
+        viewModelScope.launch {
+            repository.settings
+                .map { it.connection }
+                .distinctUntilChanged()
+                .collect { connection ->
+                    // Background sync follows the source: a manual setup should not be
+                    // waking the device every fifteen minutes to fetch nothing.
+                    SyncScheduler.applyFor(application, connection)
+                    if (connection != GlucoseConnectionOption.MANUAL) {
+                        syncNow(repository.settings.first())
+                    }
+                }
         }
     }
 

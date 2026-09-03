@@ -113,7 +113,7 @@ class NightscoutService(
             } catch (e: NightscoutException) {
                 if (e.unauthorized) sawUnauthorized = true else lastMessage = e.message ?: lastMessage
             } catch (e: IOException) {
-                Log.d(TAG, "${'$'}path via ${'$'}{describe(strategy)} -> ${'$'}{e.message}")
+                Log.d(TAG, "$path via ${describe(strategy)} -> ${e.message}")
                 lastMessage = friendlyError(e)
             }
         }
@@ -278,7 +278,7 @@ class NightscoutService(
         client.newCall(request).execute().use { response ->
             // The strategy is named but never the credential itself, so a shared logcat
             // cannot leak someone's token.
-            Log.d(TAG, "${'$'}path via ${'$'}{describe(strategy)} -> ${'$'}{response.code}")
+            Log.d(TAG, "$path via ${describe(strategy)} -> ${response.code}")
 
             if (response.code == 401 || response.code == 403) {
                 throw NightscoutException("The site rejected the access token.", unauthorized = true)
@@ -411,8 +411,8 @@ class NightscoutService(
         /** Names an auth attempt without ever printing the credential. */
         fun describe(strategy: NightscoutUrl.AuthStrategy): String = when (strategy) {
             is NightscoutUrl.AuthStrategy.None -> "no credential"
-            is NightscoutUrl.AuthStrategy.Header -> "${'$'}{strategy.field} header"
-            is NightscoutUrl.AuthStrategy.Query -> "${'$'}{strategy.name} query"
+            is NightscoutUrl.AuthStrategy.Header -> "${strategy.field} header"
+            is NightscoutUrl.AuthStrategy.Query -> "${strategy.name} query"
         }
 
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
