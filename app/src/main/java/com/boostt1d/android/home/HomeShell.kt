@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
@@ -58,6 +59,7 @@ import com.boostt1d.android.ui.BoostTheme
  */
 enum class HomeDestination {
     DASHBOARD,
+    INSIGHTS,
     BLOOD_GLUCOSE,
     EVENT_LOG,
     BOLUS_CALCULATOR,
@@ -70,13 +72,16 @@ enum class HomeDestination {
 /**
  * Persistent bottom bar.
  *
- * iOS carries five tabs — Dashboard, Food, Insights, Logs, Menu. Food and Insights are
- * phases of their own and nothing behind them exists yet, so they are not shown: a tab
- * that opens an apology is worse than a tab that isn't there. The structure is the same,
- * and they slot in beside Logs when they are built.
+ * iOS carries five tabs — Dashboard, Food, Insights, Logs, Menu. Food is a phase of its own
+ * and nothing behind it exists yet, so it is not shown: a tab that opens an apology is worse
+ * than a tab that isn't there. It slots in beside Insights when it is built.
+ *
+ * Insights opens the What Happened report directly. On iOS it is a submenu holding the report
+ * and the Doctor Visit report; the submenu returns with the second item.
  */
 private enum class HomeTab(val label: String, val icon: ImageVector) {
     DASHBOARD("Dashboard", Icons.Filled.Dashboard),
+    INSIGHTS("Insights", Icons.Filled.Insights),
     LOGS("Logs", Icons.Filled.ListAlt),
     MENU("Menu", Icons.Filled.Menu),
 }
@@ -111,6 +116,7 @@ fun HomeShell(
 
     val activeTab = when (destination) {
         HomeDestination.DASHBOARD -> HomeTab.DASHBOARD
+        HomeDestination.INSIGHTS -> HomeTab.INSIGHTS
         HomeDestination.BLOOD_GLUCOSE, HomeDestination.EVENT_LOG -> HomeTab.LOGS
         else -> HomeTab.MENU
     }
@@ -157,6 +163,10 @@ fun HomeShell(
                         HomeTab.DASHBOARD -> {
                             openTab = null
                             onSelect(HomeDestination.DASHBOARD)
+                        }
+                        HomeTab.INSIGHTS -> {
+                            openTab = null
+                            onSelect(HomeDestination.INSIGHTS)
                         }
                         // Tapping the open tab again closes it, so the bar is never a trap.
                         else -> openTab = if (openTab == tab) null else tab

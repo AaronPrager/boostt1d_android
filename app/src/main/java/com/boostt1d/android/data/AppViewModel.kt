@@ -22,6 +22,14 @@ import com.boostt1d.android.sync.NightscoutConnectionReport
 import com.boostt1d.android.sync.NightscoutService
 import com.boostt1d.android.sync.SyncOrchestrator
 import com.boostt1d.android.sync.SyncOutcome
+import com.boostt1d.android.engine.PatternService
+import com.boostt1d.android.engine.TherapyChangeDetector
+import com.boostt1d.android.engine.TherapyGlucoseFormatter
+import com.boostt1d.android.engine.WhatHappenedAnalysisCache
+import com.boostt1d.android.insights.WhatHappenedReportLoader
+import com.boostt1d.android.ui.Fmt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.TimeZone
@@ -92,7 +100,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val nightscout = NightscoutService()
     private val dexcom = DexcomShareService()
     private val libre = LibreLinkUpService()
-    private val orchestrator = SyncOrchestrator(nightscout, logs, repository, credentials)
+    // The engine's persistent facts and the report built from them. Everything here is lazy:
+    // the stores block on their first DataStore read, so nothing may touch them on the main
+    // thread, and nothing does — sync, saves and the report all run on background dispatchers.
+    private val insightsStores by lazy { InsightsStores(application) }
+    private val detector by lazy { TherapyChangeDetector(insightsStores.therapySnapshots) }
+    private val patternService = PatternService()
+    private val analysisCache by lazy { WhatHappenedAnalysisCache(insightsStores.analysisCache) }
+    private val reportLoader by lazy { WhatHappenedReportLoader(patternService, detector, analysisCache) }
+
+    private val orchestrator = SyncOrchestrator(nightscout, logs, repository, credentials, detector = lazy { detector })
+
+    /** The last What Happened result — painted instantly on open, refreshed underneath. */
+    private val _reportSnapshot = MutableStateFlow<WhatHappenedAnalysisCache.Snapshot?>(null)
+    val reportSnapshot = _reportSnapshot.asStateFlow()
+
+    private val _reportLoading = MutableStateFlow(false)
+    val reportLoading = _reportLoading.asStateFlow()
+
+    /** Off by default: the Therapy page speaks plain English until someone asks for the numbers. */
+    val advancedTherapyDetail: StateFlow<Boolean> =
+        insightsStores.advancedTherapyDetail.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /** Non-null while a sync is running, so the UI can show it without guessing. */
     private val _syncing = MutableStateFlow(false)
@@ -121,6 +149,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LogState())
 
     init {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Restored before any network call, so the report has something to show on the
+            // very first frame — deferring it would reintroduce the spinner it exists to remove.
+            _reportSnapshot.value = analysisCache.snapshot
+        }
+
         viewModelScope.launch {
             logs.load()
             // Retention is enforced on launch rather than on write: a device left closed
@@ -194,22 +228,72 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** A sync the user asked for. Never runs two at once. */
     fun syncNow(settings: GlucoseSettings) {
         if (_syncing.value) return
+        viewModelScope.launch { performSync(settings) }
+    }
+
+    private suspend fun performSync(settings: GlucoseSettings) {
+        _syncing.value = true
+        _lastOutcome.value = orchestrator.sync(settings)
+
+        // Insulin and carbs on board come from the loop's own devicestatus, not from
+        // anything the app derives. A failure here is not a sync failure — the
+        // readings still arrived.
+        _onBoard.value = runCatching {
+            OnBoard.freshOrNone(
+                nightscout.fetchOnBoard(settings.nightscoutUrl, credentials.nightscoutToken),
+                System.currentTimeMillis(),
+            )
+        }.getOrDefault(OnBoard.none)
+
+        _syncing.value = false
+    }
+
+    /**
+     * Rebuilds the What Happened report: a sync first when there is a remote source, then the
+     * builders over the fourteen days the app holds, off the main thread.
+     *
+     * The iOS report does both halves itself; here the sync is the same one every other screen
+     * uses, so the report can never hold a different fourteen days from the dashboard.
+     */
+    fun refreshReport(settings: GlucoseSettings, profile: UserProfile) {
+        if (_reportLoading.value) return
         viewModelScope.launch {
-            _syncing.value = true
-            _lastOutcome.value = orchestrator.sync(settings)
-
-            // Insulin and carbs on board come from the loop's own devicestatus, not from
-            // anything the app derives. A failure here is not a sync failure — the
-            // readings still arrived.
-            _onBoard.value = runCatching {
-                OnBoard.freshOrNone(
-                    nightscout.fetchOnBoard(settings.nightscoutUrl, credentials.nightscoutToken),
-                    System.currentTimeMillis(),
-                )
-            }.getOrDefault(OnBoard.none)
-
-            _syncing.value = false
+            _reportLoading.value = true
+            try {
+                if (settings.connection != GlucoseConnectionOption.MANUAL && !_syncing.value) {
+                    performSync(settings)
+                }
+                val readings = logs.readingRows.first()
+                val treatments = logs.treatments.value
+                val therapy = repository.therapy.first()
+                val unit = profile.bgUnit
+                val snapshot = withContext(Dispatchers.Default) {
+                    val stitched = GlucoseSourceStitch.stitched(
+                        readings,
+                        source = { it.source },
+                        epoch = { it.epochMilliseconds },
+                        preferredActive = settings.primarySourceTag,
+                    )
+                    reportLoader.build(
+                        entries = stitched.map { it.toEntry() },
+                        treatments = treatments,
+                        profile = therapy.toDocument(),
+                        lowGlucose = settings.lowGlucose,
+                        highGlucose = settings.highGlucose,
+                        therapyType = profile.therapy,
+                        formatter = TherapyGlucoseFormatter({ Fmt.glucose(it, unit) }, unit.displayName),
+                        nowMillis = System.currentTimeMillis(),
+                    )
+                }
+                _reportSnapshot.value = snapshot
+            } finally {
+                _reportLoading.value = false
+            }
         }
+    }
+
+    fun setAdvancedTherapyDetail(enabled: Boolean) {
+        viewModelScope.launch { insightsStores.setAdvancedTherapyDetail(enabled) }
     }
 
     fun clearSyncOutcome() {
@@ -217,7 +301,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun saveTherapy(therapy: TherapyProfile) {
-        viewModelScope.launch { repository.saveTherapy(therapy) }
+        viewModelScope.launch {
+            repository.saveTherapy(therapy)
+            // A device profile is overwritten in place and carries no start date, so this save
+            // is the only moment the edit is observable. Recording it later would date the
+            // change to whenever the user next opened the report, and every day already on
+            // the new setting would count as "before".
+            withContext(Dispatchers.IO) {
+                detector.record(repository.therapy.first().toDocument(), emptyList(), System.currentTimeMillis())
+            }
+        }
     }
 
     fun addReading(sgvMgdl: Int, atMillis: Long) {
@@ -255,6 +348,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             logs.deleteEverything()
             credentials.clear()
             repository.clear()
+            withContext(Dispatchers.IO) {
+                insightsStores.clear()
+                analysisCache.invalidate()
+                detector.reset()
+                patternService.invalidateAll()
+            }
+            _reportSnapshot.value = null
             _onBoard.value = OnBoard.none
             _lastOutcome.value = null
         }

@@ -27,6 +27,7 @@ import com.boostt1d.android.data.AppViewModel
 import com.boostt1d.android.home.AboutScreen
 import com.boostt1d.android.home.HomeDestination
 import com.boostt1d.android.home.HomeShell
+import com.boostt1d.android.insights.InsightsScreen
 import com.boostt1d.android.logs.AddEventDialog
 import com.boostt1d.android.logs.AddReadingDialog
 import com.boostt1d.android.logs.EventLogScreen
@@ -65,6 +66,9 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
     val syncing by viewModel.syncing.collectAsStateWithLifecycle()
     val lastOutcome by viewModel.lastOutcome.collectAsStateWithLifecycle()
     val onBoard by viewModel.onBoard.collectAsStateWithLifecycle()
+    val report by viewModel.reportSnapshot.collectAsStateWithLifecycle()
+    val reportLoading by viewModel.reportLoading.collectAsStateWithLifecycle()
+    val advancedDetail by viewModel.advancedTherapyDetail.collectAsStateWithLifecycle()
 
     var destination by remember { mutableStateOf(HomeDestination.DASHBOARD) }
     var showingAddReading by remember { mutableStateOf(false) }
@@ -113,6 +117,17 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         onRefresh = { viewModel.syncNow(current.settings) },
                         onAddReading = { showingAddReading = true },
                         onOpenHistory = { destination = HomeDestination.BLOOD_GLUCOSE },
+                        modifier = modifier,
+                    )
+
+                    HomeDestination.INSIGHTS -> InsightsScreen(
+                        snapshot = report,
+                        loading = reportLoading,
+                        unit = current.profile.bgUnit,
+                        showsAdvancedDetail = advancedDetail,
+                        nowMillis = nowMillis,
+                        onToggleAdvancedDetail = viewModel::setAdvancedTherapyDetail,
+                        onRefresh = { viewModel.refreshReport(current.settings, current.profile) },
                         modifier = modifier,
                     )
 

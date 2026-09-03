@@ -3,7 +3,7 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
-283 unit tests and 5 instrumented tests, all green.
+285 unit tests and 5 instrumented tests, all green.
 
 ## Data layer
 
@@ -46,7 +46,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ## Quality
 
-- [x] 283 unit tests, all green
+- [x] 285 unit tests, all green
 - [x] Instrumented tests — 5, against a real SQLite database
 - [ ] Instrumented *UI* tests — the screens are still only checked by hand
 - [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
@@ -184,10 +184,22 @@ dependency graph, so nothing is built on a module that is not yet proven.
 
 ## 3b — screens on top
 
-- [ ] `WhatHappenedReportView` (2,032) — the week in review, four tabs
-- N/A `TherapyAdjustmentView` (1,919) — dead on iOS: only its own #Preview instantiates it. The
-      Insights tab shows `WhatHappenedReportView`, whose Therapy page is the review. Not ported.
-      `PatternInsightCard` is only used by it and is likewise skipped
-- [ ] Review sections, outcome section, `PatternInsightCard`
-- [ ] `MultiDayOverlayChartView`
-- [ ] Insights tab restored to the shell once there is something behind it
+- [x] `WhatHappenedReportView` (2,032) — the week in review, four pages: Summary, Patterns,
+      Therapy, Days. `insights/` package; one page composed at a time, as on iOS
+- [x] Review sections and outcome section — `TherapySettingsReviewSection` with the hourly
+      strip and finding cards, `DailyTherapyReviewSection` with proposal rows, the "Did your
+      changes work?" tile, and the three pushed screens (proposal, outcomes list, one outcome).
+      `PatternInsightCard` is dead on iOS and skipped
+- [x] Insights tab restored to the shell. Opens the report directly; on iOS it is a submenu with
+      the Doctor Visit report, which returns in phase 5
+- [x] Wiring: `WhatHappenedReportLoader` is the computation half of iOS's `refreshReport`, pure
+      and tested end to end; the sync feeds every fetched profile document to the change
+      detector; a hand-entered profile records a snapshot on save; the analysis cache lives in
+      the cache directory and repaints the last result on launch
+- [ ] "Advanced details" toggle belongs in Profile → Reports as on iOS; it is on the Therapy
+      page for now
+- [ ] Verify the report on the emulator against the test instance
+- [ ] `MultiDayOverlayChartView` — the AGP profile. Used by the BG Log chart and the Doctor Visit
+      report on iOS, so it goes with those rather than with this screen
+- [ ] Ask for the insulin therapy type (loop, pump, injections) in Profile, as iOS does; the
+      field exists and the review reads it, but nothing sets it yet

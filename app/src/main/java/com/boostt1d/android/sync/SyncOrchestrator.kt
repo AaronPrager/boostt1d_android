@@ -8,6 +8,7 @@ import com.boostt1d.android.data.GlucoseSourceTag
 import com.boostt1d.android.data.LogRepository
 import com.boostt1d.android.data.ProfileRepository
 import com.boostt1d.android.data.TherapyProfile
+import com.boostt1d.android.engine.TherapyChangeDetector
 import java.io.IOException
 
 /** What the last sync did, so the UI can say something specific rather than "error". */
@@ -43,6 +44,11 @@ class SyncOrchestrator(
     private val credentials: CredentialStore,
     private val dexcom: DexcomShareService = DexcomShareService(),
     private val libre: LibreLinkUpService = LibreLinkUpService(),
+    /**
+     * Told about every profile document fetched, so a setting edited on Nightscout is dated.
+     * Lazy because the detector's store blocks on first read and this runs off the main thread.
+     */
+    private val detector: Lazy<TherapyChangeDetector>? = null,
 ) {
     suspend fun sync(settings: GlucoseSettings, nowMillis: Long = System.currentTimeMillis()): SyncOutcome =
         when (settings.connection) {
@@ -150,7 +156,12 @@ class SyncOrchestrator(
         }
 
         val therapyUpdated = try {
-            val downloaded = service.fetchTherapyProfile(url, token)
+            // One request serves both the current profile and the edit history: Nightscout
+            // keeps one document per edit, newest first, and the newest *is* the profile.
+            // Asking for them separately fetched the same response twice.
+            val documents = service.fetchProfileDocuments(url, token)
+            detector?.value?.record(profile = documents.firstOrNull(), history = documents, nowMillis = nowMillis)
+            val downloaded = documents.firstNotNullOfOrNull { it.toTherapyProfile() }
             if (downloaded != null && !downloaded.isEmpty) {
                 profiles.saveTherapy(downloaded)
                 true
