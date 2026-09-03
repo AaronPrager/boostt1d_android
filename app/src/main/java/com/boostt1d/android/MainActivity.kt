@@ -27,6 +27,8 @@ import com.boostt1d.android.data.AppViewModel
 import com.boostt1d.android.home.AboutScreen
 import com.boostt1d.android.home.HomeDestination
 import com.boostt1d.android.home.HomeShell
+import com.boostt1d.android.food.FoodHost
+import com.boostt1d.android.food.FoodStart
 import com.boostt1d.android.insights.InsightsScreen
 import com.boostt1d.android.logs.AddEventDialog
 import com.boostt1d.android.logs.AddReadingDialog
@@ -69,6 +71,7 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
     val report by viewModel.reportSnapshot.collectAsStateWithLifecycle()
     val reportLoading by viewModel.reportLoading.collectAsStateWithLifecycle()
     val advancedDetail by viewModel.advancedTherapyDetail.collectAsStateWithLifecycle()
+    val aiReviewLoading by viewModel.aiReviewLoading.collectAsStateWithLifecycle()
 
     var destination by remember { mutableStateOf(HomeDestination.DASHBOARD) }
     var showingAddReading by remember { mutableStateOf(false) }
@@ -120,9 +123,26 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         modifier = modifier,
                     )
 
+                    HomeDestination.FOOD_LOG, HomeDestination.SNAP_MEAL -> FoodHost(
+                        start = if (destination == HomeDestination.SNAP_MEAL) FoodStart.SNAP else FoodStart.LOG,
+                        foodLog = viewModel.foodLog,
+                        backend = viewModel.backend,
+                        usage = viewModel.usage,
+                        logs = logs,
+                        onBoard = onBoard,
+                        connection = current.settings.connection,
+                        unit = current.profile.bgUnit,
+                        nowMillis = nowMillis,
+                        onImportTreatments = viewModel::importCarbsIntoFoodLog,
+                        onOpenBolusCalculator = { destination = HomeDestination.BOLUS_CALCULATOR },
+                        onOpenTherapyProfile = { destination = HomeDestination.THERAPY_PROFILE },
+                        modifier = modifier,
+                    )
+
                     HomeDestination.INSIGHTS -> InsightsScreen(
                         snapshot = report,
                         loading = reportLoading,
+                        aiReviewLoading = aiReviewLoading,
                         unit = current.profile.bgUnit,
                         showsAdvancedDetail = advancedDetail,
                         nowMillis = nowMillis,

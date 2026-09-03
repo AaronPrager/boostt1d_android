@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,10 +54,11 @@ internal fun LazyListScope.therapyPage(
     unit: BGUnit,
     showsAdvancedDetail: Boolean,
     nowMillis: Long,
+    aiReviewLoading: Boolean,
     onOpenProposal: (String) -> Unit,
     onOpenOutcomes: () -> Unit,
 ) {
-    item { DailyTherapyReviewSection(snapshot.dailyTherapyReview, showsAdvancedDetail, onOpenProposal) }
+    item { DailyTherapyReviewSection(snapshot.dailyTherapyReview, showsAdvancedDetail, aiReviewLoading, onOpenProposal) }
     item { TherapyChangeOutcomeSection(snapshot.outcomes, snapshot.watchingSinceMillis, showsAdvancedDetail, nowMillis, onOpenOutcomes) }
     if (showsAdvancedDetail && snapshot.review.hasReviewContent) {
         item { DetailedTherapyReview(snapshot.review, unit) }
@@ -71,12 +73,15 @@ internal fun LazyListScope.therapyPage(
  * Ported from the iOS DailyTherapyReviewSection.
  */
 @Composable
-fun DailyTherapyReviewSection(review: DailyTherapyReview, showsAdvancedDetail: Boolean, onOpenProposal: (String) -> Unit) {
+fun DailyTherapyReviewSection(review: DailyTherapyReview, showsAdvancedDetail: Boolean, isRefreshingAI: Boolean, onOpenProposal: (String) -> Unit) {
     val colors = BoostTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(BoostSpacing.md)) {
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             // "How therapy may be contributing" is accurate and almost nobody's first language.
-            Text("Your insulin settings", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Your insulin settings", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary, modifier = Modifier.weight(1f))
+                if (isRefreshingAI) CircularProgressIndicator(color = colors.primary, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+            }
             Text("Whether your settings may have played a part in how this week went.", fontSize = 12.sp, color = colors.textSecondary)
         }
 

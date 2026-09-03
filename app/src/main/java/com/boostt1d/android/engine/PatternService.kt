@@ -1,5 +1,6 @@
 package com.boostt1d.android.engine
 
+import com.boostt1d.android.data.Config
 import com.boostt1d.android.data.NightscoutGlucoseEntry
 import com.boostt1d.android.data.NightscoutTreatment
 import com.boostt1d.android.data.TodaySoFarBuilder
@@ -73,16 +74,30 @@ data class StoredPatternReview(
  * list show identical findings. Every number comes from the detector and cannot change until
  * the window rolls over at midnight, so a cached result is served until then.
  *
- * The AI wording path is present in shape and absent in behaviour, exactly as on iOS: the
- * comprehensive daily therapy review is the single daily AI pass, and pattern cards keep the
- * detector's own deterministic wording rather than spending a second request on a settled
- * week. The merge that would apply AI wording arrives with the rest of the AI path in phase 4.
+ * The AI wording path is complete but gated off, exactly as on iOS: the comprehensive daily
+ * therapy review is the single daily AI pass, and pattern cards keep the detector's own
+ * deterministic wording rather than spending a second request on a settled week.
  *
  * Ported from the iOS PatternService.
  */
+/** The once-daily AI pass over the detected patterns. Absent until the backend client is wired. */
+interface PatternReviewer {
+    suspend fun reviewPatterns(
+        formulaPatterns: List<WhatHappenedPattern>,
+        entries: List<NightscoutGlucoseEntry>,
+        treatments: List<NightscoutTreatment>,
+        lowGlucose: Double,
+        highGlucose: Double,
+        timeRangeDays: Int,
+        mealContext: String,
+    ): AIPatternResponse
+}
+
 class PatternService(
     private val reviewStore: PatternReviewStore = InMemoryPatternReviewStore(),
     private val timeZone: TimeZone = TimeZone.getDefault(),
+    private val reviewer: PatternReviewer? = null,
+    private val aiEnabled: Boolean = Config.AI_INSIGHTS_ENABLED,
 ) {
     /** Patterns plus provenance and freshness, enough for a caller to label them honestly. */
     data class Result(
@@ -142,7 +157,7 @@ class PatternService(
      * ways, which is the divergence this service exists to prevent — then hands back only as
      * many as this caller wants.
      */
-    fun patterns(
+    suspend fun patterns(
         entries: List<NightscoutGlucoseEntry>,
         treatments: List<NightscoutTreatment>,
         lowGlucose: Double,
@@ -186,19 +201,143 @@ class PatternService(
 
         // When this result was produced. Not the newest reading: today is outside the window,
         // so the newest reading is last night's and would read as permanently stale.
-        val result = Result(
-            patterns = formulaPatterns,
-            usedAI = false,
-            aiFallbackReason = null,
-            reviewedAtMillis = null,
-            dataThroughMillis = nowMillis,
-            periodDays = periodDays,
+        val dataThrough = nowMillis
+        fun finish(result: Result): Result {
+            cache[key] = result
+            return limited(result, limit)
+        }
+
+        val activeReviewer = reviewer
+        if (activeReviewer == null || !aiEnabled || !AI_PATTERN_WORDING_ENABLED) {
+            return finish(Result(formulaPatterns, usedAI = false, aiFallbackReason = null, reviewedAtMillis = null, dataThroughMillis = dataThrough, periodDays = periodDays))
+        }
+
+        val stored = reviewStore.load(periodDays)
+
+        if (needsReview(stored, formulaPatterns, nowMillis)) {
+            try {
+                val review = activeReviewer.reviewPatterns(formulaPatterns, entries, treatments, lowGlucose, highGlucose, periodDays, mealContext)
+                val merged = merge(formulaPatterns, review, entries, periodDays, nowMillis)
+                reviewStore.save(record(merged, formulaPatterns, nowMillis, stored), periodDays)
+                return finish(Result(merged, usedAI = true, aiFallbackReason = null, reviewedAtMillis = nowMillis, dataThroughMillis = dataThrough, periodDays = periodDays))
+            } catch (error: Exception) {
+                // AI is best-effort, and a failed attempt does not consume the day's review —
+                // the next open tries again. A report is never empty because of an API error.
+                // Earlier wording, if we have any from today, is still better than none.
+                if (stored != null && sameDay(stored.reviewedAtMillis, nowMillis)) {
+                    return finish(Result(apply(stored, formulaPatterns, entries, periodDays, nowMillis), usedAI = true, aiFallbackReason = error.message, reviewedAtMillis = stored.reviewedAtMillis, dataThroughMillis = dataThrough, periodDays = periodDays))
+                }
+                return finish(Result(formulaPatterns, usedAI = false, aiFallbackReason = error.message, reviewedAtMillis = null, dataThroughMillis = dataThrough, periodDays = periodDays))
+            }
+        }
+
+        // Today's review already happened. Fresh numbers, this morning's wording.
+        if (stored == null) {
+            return finish(Result(formulaPatterns, usedAI = false, aiFallbackReason = null, reviewedAtMillis = null, dataThroughMillis = dataThrough, periodDays = periodDays))
+        }
+        return finish(Result(apply(stored, formulaPatterns, entries, periodDays, nowMillis), usedAI = true, aiFallbackReason = null, reviewedAtMillis = stored.reviewedAtMillis, dataThroughMillis = dataThrough, periodDays = periodDays))
+    }
+
+    private fun sameDay(a: Long, b: Long) = TodaySoFarBuilder.startOfDay(a, timeZone) == TodaySoFarBuilder.startOfDay(b, timeZone)
+
+    // MARK: - Storing and reapplying wording
+
+    /** What today's review said, keyed so tomorrow's detector output can pick it up by title. */
+    internal fun record(merged: List<WhatHappenedPattern>, formulaPatterns: List<WhatHappenedPattern>, reviewedAtMillis: Long, previous: StoredPatternReview?): StoredPatternReview {
+        val proseByTitle = mutableMapOf<String, StoredProse>()
+        val proposals = mutableListOf<StoredProposal>()
+        for (pattern in merged) {
+            when (pattern.source) {
+                PatternSource.AI_ENRICHED -> proseByTitle[pattern.title] = StoredProse(pattern.observation, pattern.contributingFactors, pattern.discussQuestions)
+                PatternSource.AI -> proposals += StoredProposal(pattern.title, pattern.observation, pattern.occurrenceCount, pattern.priority.label, pattern.contributingFactors, pattern.discussQuestions)
+                PatternSource.FORMULA -> {}
+            }
+        }
+        // Carry forward titles seen earlier today so a re-run triggered by one new pattern
+        // doesn't make every other pattern look new on the next open.
+        val carried = previous?.takeIf { sameDay(it.reviewedAtMillis, reviewedAtMillis) }
+        val titles = (carried?.reviewedTitles ?: emptyList()).toMutableSet()
+        titles += formulaPatterns.map { it.title }
+        return StoredPatternReview(reviewedAtMillis, proseByTitle, proposals, titles.toList(), (carried?.reviewCount ?: 0) + 1)
+    }
+
+    /**
+     * Re-applies stored wording to freshly detected patterns, matching on title. A pattern
+     * that faded during the day drops out and its wording goes with it; one that emerged since
+     * keeps formula wording until the next review. Losing prose is the safe failure here.
+     */
+    internal fun apply(stored: StoredPatternReview, formulaPatterns: List<WhatHappenedPattern>, entries: List<NightscoutGlucoseEntry>, periodDays: Int, nowMillis: Long): List<WhatHappenedPattern> {
+        val patterns = formulaPatterns.map { pattern ->
+            val prose = stored.proseByTitle[pattern.title] ?: return@map pattern
+            enriched(pattern, prose.observation, prose.contributingFactors, prose.discussQuestions, periodDays)
+        }.toMutableList()
+        // AI-proposed patterns have no detector counterpart, so they are rebuilt from the stored
+        // claim — with the chart recomputed from today's data and the count re-clamped.
+        val averages = dailyAverages(entries, periodDays, nowMillis)
+        for (proposal in stored.proposals) {
+            proposed(proposal.title, proposal.observation, proposal.occurrenceCount, proposal.priority, proposal.contributingFactors, proposal.discussQuestions, averages, periodDays)?.let { patterns += it }
+        }
+        return patterns
+    }
+
+    /**
+     * Applies AI's wording to formula patterns and appends AI-proposed ones. Index-based, which
+     * is correct here and only here: the response and the detector output it refers to are
+     * both in hand. Numbers are never taken from AI.
+     */
+    internal fun merge(formulaPatterns: List<WhatHappenedPattern>, review: AIPatternResponse, entries: List<NightscoutGlucoseEntry>, periodDays: Int, nowMillis: Long): List<WhatHappenedPattern> {
+        val patterns = formulaPatterns.toMutableList()
+        for (enrichment in review.resolvedEnriched) {
+            if (enrichment.index !in patterns.indices) continue
+            patterns[enrichment.index] = enriched(patterns[enrichment.index], enrichment.observation, enrichment.contributingFactors, enrichment.discussQuestions, periodDays)
+        }
+        val averages = dailyAverages(entries, periodDays, nowMillis)
+        for (proposal in review.resolvedAdditional) {
+            proposed(proposal.title, proposal.observation, proposal.occurrenceCount ?: 0, proposal.priority, proposal.contributingFactors ?: emptyList(), proposal.discussQuestions ?: emptyList(), averages, periodDays)?.let { patterns += it }
+        }
+        return patterns
+    }
+
+    /** Rebuilds a detected pattern with AI wording. Every numeric field is taken from the original. */
+    private fun enriched(original: WhatHappenedPattern, observation: String?, contributingFactors: List<String>?, discussQuestions: List<String>?, periodDays: Int): WhatHappenedPattern =
+        original.copy(
+            source = PatternSource.AI_ENRICHED,
+            observation = withoutUnsupportedWeekdayClaims(observation, periodDays) ?: original.observation,
+            contributingFactors = withoutUnsupportedWeekdayClaims(contributingFactors, periodDays) ?: original.contributingFactors,
+            discussQuestions = withoutUnsupportedWeekdayClaims(discussQuestions, periodDays) ?: original.discussQuestions,
         )
 
-        // AI wording is gated off, as on iOS. When phase 4 brings the reviewer, this is where
-        // needsReview() decides whether to spend a call and the stored review is merged in.
-        cache[key] = result
-        return limited(result, limit)
+    /**
+     * Builds an AI-proposed pattern, verifying its one numeric claim against real data: the
+     * opportunity count is the actual number of days with readings, and the occurrence count is
+     * clamped into it. Null when there is no data to verify against, or when the claim is one
+     * the window cannot support.
+     */
+    private fun proposed(title: String, observation: String, occurrenceCount: Int, priority: String?, contributingFactors: List<String>, discussQuestions: List<String>, dailyAverages: List<WhatHappenedPatternChartPoint>, periodDays: Int): WhatHappenedPattern? {
+        val cleanTitle = cleaned(title) ?: return null
+        val cleanObservation = cleaned(observation) ?: return null
+        // No detector wording to fall back on, so an unsupported weekday claim cannot be
+        // replaced — the whole pattern goes.
+        if (periodDays < MIN_PERIOD_DAYS_FOR_WEEKDAY_CLAIMS && (makesWeekdayClaim(cleanTitle) || makesWeekdayClaim(cleanObservation))) return null
+        val opportunities = dailyAverages.size
+        if (opportunities <= 0) return null
+        val occurrences = occurrenceCount.coerceIn(0, opportunities)
+        return WhatHappenedPattern(
+            id = java.util.UUID.randomUUID().toString(),
+            source = PatternSource.AI,
+            title = cleanTitle,
+            observation = cleanObservation,
+            frequencyLabel = if (occurrences > 0) "$occurrences of $opportunities days" else "Across $opportunities days",
+            occurrenceCount = occurrences,
+            opportunityCount = opportunities,
+            priority = priorityFrom(priority),
+            // Chart values are ours, not AI's.
+            chartPoints = dailyAverages,
+            chartKind = WhatHappenedPatternChartKind.AVERAGE_GLUCOSE,
+            contributingFactors = withoutUnsupportedWeekdayClaims(contributingFactors, periodDays) ?: emptyList(),
+            discussQuestions = withoutUnsupportedWeekdayClaims(discussQuestions, periodDays) ?: emptyList(),
+            score = 0.0,
+        )
     }
 
     fun invalidate() = cache.clear()

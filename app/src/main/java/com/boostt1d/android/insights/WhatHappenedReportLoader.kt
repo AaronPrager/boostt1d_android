@@ -5,6 +5,7 @@ import com.boostt1d.android.data.InsulinTherapyType
 import com.boostt1d.android.data.NightscoutGlucoseEntry
 import com.boostt1d.android.data.NightscoutProfileDocument
 import com.boostt1d.android.data.NightscoutTreatment
+import com.boostt1d.android.engine.DailyTherapyReviewCache
 import com.boostt1d.android.engine.DailyTherapyReviewService
 import com.boostt1d.android.engine.GlucoseWeeklyReportBuilder
 import com.boostt1d.android.engine.MealOutcomeBuilder
@@ -33,9 +34,13 @@ class WhatHappenedReportLoader(
     private val patternService: PatternService,
     private val detector: TherapyChangeDetector,
     private val analysisCache: WhatHappenedAnalysisCache,
+    private val dailyReviewCache: DailyTherapyReviewCache? = null,
+    /** The once-daily AI trip. Null means AI is off in this build. */
+    private val dailyReviewer: DailyTherapyReviewService.Reviewer? = null,
     private val timeZone: TimeZone = TimeZone.getDefault(),
 ) {
-    fun build(
+    /** The formula-only result, painted first. [enrich] adds today's AI wording afterwards. */
+    suspend fun build(
         entries: List<NightscoutGlucoseEntry>,
         treatments: List<NightscoutTreatment>,
         profile: NightscoutProfileDocument?,
@@ -114,12 +119,19 @@ class WhatHappenedReportLoader(
 
         // The window ends at midnight; the review is dated to the last moment inside it.
         val displayPeriodEnd = weekEnd - 1
-        // No AI in this build, so the opening review is the complete review. When phase 4
-        // brings the reviewer, today's cached wording is painted here first.
+        // Paint with today's AI wording if it belongs to this same week. Numbers are still
+        // rebuilt from the current formula findings underneath — only the prose is reused.
+        // Painting formula-only here is what made an AI sentence read in the morning look like
+        // it had disappeared by the afternoon.
+        val cachedAI = dailyReviewCache?.let { cache ->
+            val reuseKey = DailyTherapyReviewService.weekReuseKey(weekStart, profile, lowGlucose, highGlucose)
+            DailyTherapyReviewService.todaysCachedAI(reuseKey, nowMillis, cache, aiEnabled = dailyReviewer != null)
+        }
         val dailyReview = DailyTherapyReviewService.assemble(
             formulaReview = bundle.review, treatments = weekTreatments,
             periodStartMillis = weekStart, periodEndMillis = displayPeriodEnd,
-            ai = null, generatedAtMillis = nowMillis, statusNote = null, therapyType = therapyType,
+            ai = cachedAI?.response, generatedAtMillis = cachedAI?.analyzedAtMillis ?: nowMillis,
+            statusNote = null, therapyType = therapyType,
         )
 
         val snapshot = WhatHappenedAnalysisCache.Snapshot(
@@ -134,5 +146,40 @@ class WhatHappenedReportLoader(
         )
         analysisCache.store(snapshot)
         return snapshot
+    }
+
+    /**
+     * The once-daily AI pass over a painted snapshot. The cache enforces one attempt per
+     * calendar day, so refreshes and reopens do not spend another request or move the wording
+     * around; when there is nothing to do it hands the snapshot back unchanged.
+     */
+    suspend fun enrich(
+        snapshot: WhatHappenedAnalysisCache.Snapshot,
+        entries: List<NightscoutGlucoseEntry>,
+        treatments: List<NightscoutTreatment>,
+        profile: NightscoutProfileDocument?,
+        lowGlucose: Double,
+        highGlucose: Double,
+        therapyType: InsulinTherapyType,
+        nowMillis: Long,
+        foodLogEntries: List<FoodLogSnapshot> = emptyList(),
+    ): WhatHappenedAnalysisCache.Snapshot {
+        val reviewer = dailyReviewer ?: return snapshot
+        val cache = dailyReviewCache ?: return snapshot
+        val window = WhatHappenedPatternDetector.analysisWindow(7, nowMillis, timeZone)
+        val weekEntries = entries.filter { it.epochMilliseconds >= window.startMillis && it.epochMilliseconds < window.endMillis }
+        val weekTreatments = treatments.filter { val at = MealOutcomeBuilder.treatmentMillis(it); at >= window.startMillis && at < window.endMillis }
+        val weekFood = foodLogEntries.filter { it.recordedAtMillis >= window.startMillis && it.recordedAtMillis < window.endMillis }
+
+        val enriched = DailyTherapyReviewService.review(
+            glucoseEntries = weekEntries, treatments = weekTreatments, foodLogEntries = weekFood, profile = profile,
+            formulaReview = snapshot.review, lowGlucose = lowGlucose, highGlucose = highGlucose,
+            periodStartMillis = window.startMillis, periodEndMillis = window.endMillis - 1, nowMillis = nowMillis,
+            cache = cache, reviewer = reviewer, isDevMode = com.boostt1d.android.data.Config.IS_DEV_MODE,
+            therapyType = therapyType, timeZone = timeZone,
+        )
+        val updated = snapshot.copy(dailyTherapyReview = enriched)
+        analysisCache.store(updated)
+        return updated
     }
 }

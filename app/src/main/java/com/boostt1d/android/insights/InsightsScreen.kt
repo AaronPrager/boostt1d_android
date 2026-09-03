@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,6 +56,7 @@ private enum class ReportPage(val label: String) { SUMMARY("Summary"), PATTERNS(
 fun InsightsScreen(
     snapshot: WhatHappenedAnalysisCache.Snapshot?,
     loading: Boolean,
+    aiReviewLoading: Boolean,
     unit: BGUnit,
     showsAdvancedDetail: Boolean,
     nowMillis: Long,
@@ -103,7 +105,7 @@ fun InsightsScreen(
     }
 
     WhatHappenedReportScreen(
-        snapshot = snapshot, loading = loading, unit = unit, showsAdvancedDetail = showsAdvancedDetail, nowMillis = nowMillis,
+        snapshot = snapshot, loading = loading, aiReviewLoading = aiReviewLoading, unit = unit, showsAdvancedDetail = showsAdvancedDetail, nowMillis = nowMillis,
         onRefresh = onRefresh,
         onOpenProposal = { proposalId = it; route = "proposal" },
         onOpenOutcomes = { route = "outcomes" },
@@ -115,6 +117,7 @@ fun InsightsScreen(
 private fun WhatHappenedReportScreen(
     snapshot: WhatHappenedAnalysisCache.Snapshot?,
     loading: Boolean,
+    aiReviewLoading: Boolean,
     unit: BGUnit,
     showsAdvancedDetail: Boolean,
     nowMillis: Long,
@@ -125,7 +128,15 @@ private fun WhatHappenedReportScreen(
 ) {
     val colors = BoostTheme.colors
     var page by rememberSaveable { mutableStateOf(ReportPage.SUMMARY) }
-    val hasData = snapshot?.report?.hasEnoughCurrentData == true
+
+    // AI wording arriving while Therapy is on screen is held until the user leaves the page, so
+    // proposal layout and scroll position do not jump as sentences reflow under a thumb.
+    var shown by remember { mutableStateOf(snapshot) }
+    LaunchedEffect(snapshot, page) {
+        if (shown == null || page != ReportPage.THERAPY) shown = snapshot
+    }
+    val active = shown ?: snapshot
+    val hasData = active?.report?.hasEnoughCurrentData == true
 
     ScreenScaffold(title = "What Happened?", subtitle = "Your last seven days, in plain language", modifier = modifier) {
         item {
@@ -142,13 +153,13 @@ private fun WhatHappenedReportScreen(
 
         // One page exists at a time, so the segmented control costs exactly one page.
         when {
-            loading && snapshot == null -> item { LoadingBlock(pageLoadingMessage(page)) }
+            loading && active == null -> item { LoadingBlock(pageLoadingMessage(page)) }
             !hasData -> item { EmptyReport() }
             else -> when (page) {
-                ReportPage.SUMMARY -> summaryPage(snapshot!!, unit)
-                ReportPage.PATTERNS -> patternsPage(snapshot!!, unit)
-                ReportPage.THERAPY -> therapyPage(snapshot!!, unit, showsAdvancedDetail, nowMillis, onOpenProposal, onOpenOutcomes)
-                ReportPage.DAYS -> daysPage(snapshot!!.dailyDays, unit)
+                ReportPage.SUMMARY -> summaryPage(active!!, unit)
+                ReportPage.PATTERNS -> patternsPage(active!!, unit)
+                ReportPage.THERAPY -> therapyPage(active!!, unit, showsAdvancedDetail, nowMillis, aiReviewLoading, onOpenProposal, onOpenOutcomes)
+                ReportPage.DAYS -> daysPage(active!!.dailyDays, unit)
             }
         }
     }

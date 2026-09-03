@@ -365,7 +365,7 @@ object DailyTherapyReviewService {
         return counts.size == 7 && counts.values.all { it >= 48 }
     }
 
-    private fun foodLogSummary(entries: List<FoodLogSnapshot>, timeZone: TimeZone): String {
+    fun foodLogSummary(entries: List<FoodLogSnapshot>, timeZone: TimeZone = TimeZone.getDefault()): String {
         if (entries.isEmpty()) return "No in-app food log entries in this period."
         val formatter = SimpleDateFormat("MM-dd HH:mm", Locale.US).apply { this.timeZone = timeZone }
         return entries.sortedBy { it.recordedAtMillis }.joinToString("\n") { entry ->

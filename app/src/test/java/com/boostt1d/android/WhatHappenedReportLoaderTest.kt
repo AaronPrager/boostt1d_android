@@ -20,6 +20,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import java.util.Calendar
 import java.util.TimeZone
@@ -66,7 +67,7 @@ class WhatHappenedReportLoaderTest {
     )
 
     @Test
-    fun `a fortnight of data produces every page of the report`() {
+    fun `a fortnight of data produces every page of the report`() = runBlocking {
         val snapshot = loader().build(entries(), meals(), profile, 70.0, 180.0, InsulinTherapyType.UNSPECIFIED, TherapyGlucoseFormatter.mgdl, now)
 
         assertTrue(snapshot.report.hasEnoughCurrentData)
@@ -81,10 +82,11 @@ class WhatHappenedReportLoaderTest {
         // The first save of a profile starts the change-watching clock.
         assertNotNull(snapshot.watchingSinceMillis)
         assertTrue(snapshot.outcomes.isEmpty())
+        Unit
     }
 
     @Test
-    fun `a second load of the same week reuses the memoised review and persists the snapshot`() {
+    fun `a second load of the same week reuses the memoised review and persists the snapshot`() = runBlocking {
         val store = InMemoryAnalysisCacheStore()
         val first = loader(store)
         val a = first.build(entries(), meals(), profile, 70.0, 180.0, InsulinTherapyType.UNSPECIFIED, TherapyGlucoseFormatter.mgdl, now)
@@ -96,5 +98,6 @@ class WhatHappenedReportLoaderTest {
 
         // A cold start restores what the last load painted.
         assertEquals(a.review.findings.size, WhatHappenedAnalysisCache(store).snapshot?.review?.findings?.size)
+        Unit
     }
 }

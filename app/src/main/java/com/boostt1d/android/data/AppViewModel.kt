@@ -22,7 +22,9 @@ import com.boostt1d.android.sync.NightscoutConnectionReport
 import com.boostt1d.android.sync.NightscoutService
 import com.boostt1d.android.sync.SyncOrchestrator
 import com.boostt1d.android.sync.SyncOutcome
+import com.boostt1d.android.engine.DailyTherapyReviewCache
 import com.boostt1d.android.engine.PatternService
+import com.boostt1d.android.sync.BoostBackend
 import com.boostt1d.android.engine.TherapyChangeDetector
 import com.boostt1d.android.engine.TherapyGlucoseFormatter
 import com.boostt1d.android.engine.WhatHappenedAnalysisCache
@@ -105,9 +107,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // thread, and nothing does — sync, saves and the report all run on background dispatchers.
     private val insightsStores by lazy { InsightsStores(application) }
     private val detector by lazy { TherapyChangeDetector(insightsStores.therapySnapshots) }
-    private val patternService = PatternService()
     private val analysisCache by lazy { WhatHappenedAnalysisCache(insightsStores.analysisCache) }
-    private val reportLoader by lazy { WhatHappenedReportLoader(patternService, detector, analysisCache) }
+    private val dailyReviewCache by lazy { DailyTherapyReviewCache(insightsStores.dailyReview) }
+
+    // Food: the diary, the daily estimation allowance, and the proxy both AI features call.
+    val foodLog = FoodLogRepository(application)
+    private val foodStores by lazy { FoodStores(application) }
+    val usage by lazy { UsageTracker(foodStores.usage) }
+    val backend by lazy {
+        BoostBackend(usage = usage, therapyType = { (state.value as? AppState.Ready)?.profile?.therapy ?: InsulinTherapyType.UNSPECIFIED })
+    }
+    /** AI is a build-time switch; when off, every reviewer is absent and the formula stands alone. */
+    private val aiReviewer: BoostBackend? get() = if (Config.AI_INSIGHTS_ENABLED) backend else null
+    private val patternService by lazy { PatternService(reviewer = aiReviewer) }
+    private val reportLoader by lazy {
+        WhatHappenedReportLoader(patternService, detector, analysisCache, dailyReviewCache = dailyReviewCache, dailyReviewer = aiReviewer)
+    }
+
+    /** True while the once-daily AI wording is being fetched for an already painted report. */
+    private val _aiReviewLoading = MutableStateFlow(false)
+    val aiReviewLoading = _aiReviewLoading.asStateFlow()
 
     private val orchestrator = SyncOrchestrator(nightscout, logs, repository, credentials, detector = lazy { detector })
 
@@ -246,6 +265,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }.getOrDefault(OnBoard.none)
 
         _syncing.value = false
+        importCarbsIntoFoodLog()
+    }
+
+    /** Carb-bearing treatments become Food Log rows. Idempotent, so safe after every sync and on every open of the diary. */
+    fun importCarbsIntoFoodLog() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { foodLog.importCarbsFromTreatments(logs.treatments.value) }
+        }
     }
 
     /**
@@ -267,27 +294,51 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val treatments = logs.treatments.value
                 val therapy = repository.therapy.first()
                 val unit = profile.bgUnit
-                val snapshot = withContext(Dispatchers.Default) {
-                    val stitched = GlucoseSourceStitch.stitched(
+                val nowMillis = System.currentTimeMillis()
+                val food = withContext(Dispatchers.IO) { foodLog.snapshots(withinDays = 8, nowMillis = nowMillis) }
+                val entries = withContext(Dispatchers.Default) {
+                    GlucoseSourceStitch.stitched(
                         readings,
                         source = { it.source },
                         epoch = { it.epochMilliseconds },
                         preferredActive = settings.primarySourceTag,
-                    )
+                    ).map { it.toEntry() }
+                }
+                val document = therapy.toDocument()
+                val snapshot = withContext(Dispatchers.Default) {
                     reportLoader.build(
-                        entries = stitched.map { it.toEntry() },
+                        entries = entries,
                         treatments = treatments,
-                        profile = therapy.toDocument(),
+                        profile = document,
                         lowGlucose = settings.lowGlucose,
                         highGlucose = settings.highGlucose,
                         therapyType = profile.therapy,
                         formatter = TherapyGlucoseFormatter({ Fmt.glucose(it, unit) }, unit.displayName),
-                        nowMillis = System.currentTimeMillis(),
+                        nowMillis = nowMillis,
+                        foodLogEntries = food,
                     )
                 }
                 _reportSnapshot.value = snapshot
+                _reportLoading.value = false
+
+                // Paint the complete local answer first, then enrich it in the background. The
+                // cache enforces one AI attempt per calendar day, so refreshes and reopens do not
+                // spend another request or move the wording around.
+                if (aiReviewer != null) {
+                    _aiReviewLoading.value = true
+                    val enriched = withContext(Dispatchers.IO) {
+                        runCatching {
+                            reportLoader.enrich(
+                                snapshot, entries, treatments, document, settings.lowGlucose, settings.highGlucose,
+                                profile.therapy, nowMillis, foodLogEntries = food,
+                            )
+                        }.getOrDefault(snapshot)
+                    }
+                    _reportSnapshot.value = enriched
+                }
             } finally {
                 _reportLoading.value = false
+                _aiReviewLoading.value = false
             }
         }
     }
@@ -331,6 +382,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         viewModelScope.launch {
             logs.addTreatment(eventType, atMillis, insulin, carbs, notes, durationMinutes)
+            // A carb entry in the Event Log is a meal; it appears in the Food Log too.
+            if ((carbs ?: 0.0) > 0) importCarbsIntoFoodLog()
         }
     }
 
@@ -353,6 +406,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 analysisCache.invalidate()
                 detector.reset()
                 patternService.invalidateAll()
+                foodLog.deleteAll()
+                foodStores.clear()
             }
             _reportSnapshot.value = null
             _onBoard.value = OnBoard.none

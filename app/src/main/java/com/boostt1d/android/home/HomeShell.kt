@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
@@ -59,6 +61,8 @@ import com.boostt1d.android.ui.BoostTheme
  */
 enum class HomeDestination {
     DASHBOARD,
+    FOOD_LOG,
+    SNAP_MEAL,
     INSIGHTS,
     BLOOD_GLUCOSE,
     EVENT_LOG,
@@ -72,15 +76,15 @@ enum class HomeDestination {
 /**
  * Persistent bottom bar.
  *
- * iOS carries five tabs — Dashboard, Food, Insights, Logs, Menu. Food is a phase of its own
- * and nothing behind it exists yet, so it is not shown: a tab that opens an apology is worse
- * than a tab that isn't there. It slots in beside Insights when it is built.
+ * iOS carries five tabs — Dashboard, Food, Insights, Logs, Menu. Food opens a submenu with
+ * Snap a Meal and the Food Log, as on iOS.
  *
  * Insights opens the What Happened report directly. On iOS it is a submenu holding the report
  * and the Doctor Visit report; the submenu returns with the second item.
  */
 private enum class HomeTab(val label: String, val icon: ImageVector) {
     DASHBOARD("Dashboard", Icons.Filled.Dashboard),
+    FOOD("Food", Icons.Filled.Restaurant),
     INSIGHTS("Insights", Icons.Filled.Insights),
     LOGS("Logs", Icons.Filled.ListAlt),
     MENU("Menu", Icons.Filled.Menu),
@@ -102,6 +106,10 @@ fun HomeShell(
     val colors = BoostTheme.colors
     var openTab by remember { mutableStateOf<HomeTab?>(null) }
 
+    val foodItems = listOf(
+        SubmenuItem("Snap a Meal", "Photo to carb estimate", Icons.Filled.CameraAlt, HomeDestination.SNAP_MEAL),
+        SubmenuItem("Food Log", "Meals, carbs and photos", Icons.Filled.Restaurant, HomeDestination.FOOD_LOG),
+    )
     val logsItems = listOf(
         SubmenuItem("BG Log", "Readings and charts", Icons.Filled.ShowChart, HomeDestination.BLOOD_GLUCOSE),
         SubmenuItem("Event Log", "Insulin, carbs and events", Icons.AutoMirrored.Filled.MenuBook, HomeDestination.EVENT_LOG),
@@ -116,6 +124,7 @@ fun HomeShell(
 
     val activeTab = when (destination) {
         HomeDestination.DASHBOARD -> HomeTab.DASHBOARD
+        HomeDestination.FOOD_LOG, HomeDestination.SNAP_MEAL -> HomeTab.FOOD
         HomeDestination.INSIGHTS -> HomeTab.INSIGHTS
         HomeDestination.BLOOD_GLUCOSE, HomeDestination.EVENT_LOG -> HomeTab.LOGS
         else -> HomeTab.MENU
@@ -139,6 +148,14 @@ fun HomeShell(
             modifier = Modifier.align(Alignment.BottomCenter),
             verticalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
         ) {
+            AnimatedVisibility(
+                visible = openTab == HomeTab.FOOD,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut(),
+            ) {
+                Submenu(foodItems, destination) { onSelect(it); openTab = null }
+            }
+
             AnimatedVisibility(
                 visible = openTab == HomeTab.LOGS,
                 enter = slideInVertically { it } + fadeIn(),

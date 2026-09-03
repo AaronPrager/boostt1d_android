@@ -58,4 +58,38 @@ object Config {
                 "risk of hypoglycemia.",
         ),
     )
+
+    // MARK: - Backend
+    //
+    // Both AI features go through the BoostT1D proxy; the Gemini key never leaves the server
+    // (it spends the Google credits through Vertex, which only the backend can reach).
+
+    /** Meal photos → nutrition estimate. */
+    const val BACKEND_FOOD_ANALYSIS_URL = "https://boostt1d.com/api/food-analysis"
+    /** Text-only pattern and therapy review. */
+    const val BACKEND_INSIGHTS_URL = "https://boostt1d.com/api/insights"
+    const val SUPPORT_PAGE_URL = "https://boostt1d.com/support"
+
+    /**
+     * Demographics-only registration, no account. iOS posts to `/api/ios/register-profile`;
+     * the server needs this route added (or the iOS one generalised) before the client below
+     * can succeed. Best-effort either way — onboarding never waits on it.
+     */
+    const val REGISTRATION_URL = "https://boostt1d.com/api/android/register-profile"
+    const val REGISTRATION_MARK_DELETED_URL = "$REGISTRATION_URL/mark-deleted"
+    const val REGISTRATION_MARKETING_OPT_IN_URL = "$REGISTRATION_URL/marketing-opt-in"
+
+    // MARK: - Build-time feature switches
+
+    /** `false` = every pattern and insight comes from the local formula. `true` = AI, falling back to formula silently. */
+    const val AI_INSIGHTS_ENABLED = true
+
+    /** `true` = [FOOD_ANALYSIS_DAILY_LIMIT] free estimations per day. `false` = unlimited. */
+    const val LIMIT_FOOD_ANALYSIS = true
+    const val FOOD_ANALYSIS_DAILY_LIMIT = 6
+
+    const val IS_DEV_MODE = false
+
+    /** Dev only: show Re-run AI and allow bypassing the once-per-day therapy AI cache. */
+    val ALLOW_REPEATED_DAILY_AI_REVIEW: Boolean get() = IS_DEV_MODE
 }

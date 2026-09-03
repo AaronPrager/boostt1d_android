@@ -3,7 +3,7 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
-285 unit tests and 5 instrumented tests, all green.
+308 unit tests and 5 instrumented tests, all green.
 
 ## Data layer
 
@@ -46,7 +46,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ## Quality
 
-- [x] 285 unit tests, all green
+- [x] 308 unit tests, all green
 - [x] Instrumented tests — 5, against a real SQLite database
 - [ ] Instrumented *UI* tests — the screens are still only checked by hand
 - [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
@@ -169,8 +169,8 @@ dependency graph, so nothing is built on a module that is not yet proven.
       once-a-day gate are complete and tested
 - [x] `WhatHappenedAnalysisCache` ← WhatHappenedAnalysisCachePersistenceTests — behind
       `AnalysisCacheStore`; the app supplies the cache-directory file
-- [ ] `TherapyAnalysisCache` — deferred to phase 4: it caches `AITherapySuggestions`, the AI
-      dose-analysis response, which does not exist until the AI path does
+- N/A `TherapyAnalysisCache`, `AIGlucoseAnalysisService`, `analyzeTherapyAdjustments` — the dose-
+      analysis AI path only feeds `TherapyAdjustmentView`, which is dead on iOS. Not ported
 - [x] `DoseSuggestionService` — no iOS test file; gated by `HIDE_DOSE_RECOMMENDATIONS` and
       pinned here with eleven tests, one of which asserts the flag is still on
 - [x] `TherapySettingsReviewBuilder` ← TherapySettingsReviewBuilderTests (816 lines) — the
@@ -179,7 +179,6 @@ dependency graph, so nothing is built on a module that is not yet proven.
 - [ ] `DiabetesProfileService` — app-side orchestration, not engine: on Android it is
       `ProfileRepository` + `fetchProfileDocuments`. What remains is wiring — record a detector
       snapshot on every local profile save, feed fetched history in on sync (see 3b)
-- [ ] `AIGlucoseAnalysisService` — deferred to phase 4 with the rest of the AI path
 - N/A `DefaultsHygieneTests` — iOS UserDefaults hygiene; DataStore has no equivalent problem
 
 ## 3b — screens on top
@@ -205,3 +204,41 @@ dependency graph, so nothing is built on a module that is not yet proven.
       report on iOS, so it goes with those rather than with this screen
 - [x] Insulin therapy type (loop, pump, injections) — already asked in Profile; the review and
       the daily review read it
+
+---
+
+# Phase 4 — Food & AI
+
+Both AI features go through the BoostT1D proxy (`/api/food-analysis`, `/api/insights`); the
+Gemini key never leaves the server. On iOS only two AI calls are live — the meal photo and the
+once-daily therapy review — and the same two are live here.
+
+## Food
+
+- [x] Food log in Room (v2, auto-migrated): photo analyses, manual meals, and carbs imported
+      idempotently from the Event Log ← EventLogFoodLogImportTests + the planner's own rules
+- [x] Food Log screen (1 / 7 / 30 days, totals, thumbnails) and the shared entry editor (photo
+      from camera or library, nutrition, insulin given, delete when editing)
+- [x] Snap a Meal: photo → estimate → Current Data. The dose is withheld under
+      `HIDE_DOSE_RECOMMENDATIONS`; the inputs are shown read-only, with IOB/COB marked unknown when
+      the CGM connection is stale, as on iOS
+- [x] Six free estimations a day, reset at local midnight, counted on the device
+- [x] Upload sizing (≤320 KB) and row thumbnails (256 px, ≤80 KB) match the iOS limits
+- [x] Food tab with its Snap a Meal / Food Log submenu, as on iOS
+- [ ] The camera is the system camera via a FileProvider, not an in-app capture view. No CAMERA
+      permission is declared, so none is asked for
+- [ ] The Bolus Calculator button opens the calculator without prefilling carbs; iOS prefills
+- [ ] Verify Food Log, manual entry and the camera path on the emulator
+
+## AI
+
+- [x] `BoostBackend` — Gemini-shaped bodies to the proxy; 5xx retried with backoff; the iOS
+      status messages. Prompts reproduced verbatim (`AIPrompts`)
+- [x] Once-daily therapy review wired: painted after the formula result, one attempt per
+      calendar day, wording held while Therapy is on screen. `AI_INSIGHTS_ENABLED = true`
+- [x] Food-response parser with every iOS fallback (fences, prose, carbs-from-text, direct body)
+- [x] Pattern reviewer wired but gated off (`aiPatternWordingEnabled = false`), exactly as on iOS
+- [ ] Verify the daily review against the live backend once (it spends the day's one call)
+- [ ] Demographics registration (`IosRegistrationService`) — client not yet ported; the server
+      needs an `/api/android/register-profile` route (or a generalised one) first
+

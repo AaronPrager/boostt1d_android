@@ -1,6 +1,7 @@
 package com.boostt1d.android.data
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -86,9 +87,19 @@ interface GlucoseReadingDao {
     suspend fun deleteAll()
 }
 
-@Database(entities = [GlucoseReadingEntity::class], version = 1, exportSchema = true)
+/**
+ * Version 2 adds the food log. The step is an auto-migration generated from the exported
+ * schemas, so existing readings survive the upgrade untouched.
+ */
+@Database(
+    entities = [GlucoseReadingEntity::class, FoodLogEntryEntity::class],
+    version = 2,
+    exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
+)
 abstract class BoostDatabase : RoomDatabase() {
     abstract fun glucoseReadingDao(): GlucoseReadingDao
+    abstract fun foodLogDao(): FoodLogDao
 
     companion object {
         @Volatile private var instance: BoostDatabase? = null

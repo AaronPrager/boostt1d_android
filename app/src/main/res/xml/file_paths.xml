@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one private cache directory the system camera may write a meal photo into. -->
+<paths>
+    <cache-path name="camera" path="camera/" />
+</paths>
