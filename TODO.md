@@ -3,7 +3,7 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
-227 unit tests and 5 instrumented tests, all green.
+237 unit tests and 5 instrumented tests, all green.
 
 ## Data layer
 
@@ -46,7 +46,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ## Quality
 
-- [x] 227 unit tests, all green
+- [x] 237 unit tests, all green
 - [x] Instrumented tests — 5, against a real SQLite database
 - [ ] Instrumented *UI* tests — the screens are still only checked by hand
 - [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
@@ -160,7 +160,8 @@ dependency graph, so nothing is built on a module that is not yet proven.
       statistics card's very-high constant rather than declaring a second 250
 - [x] `WhatHappenedDailyOverviewBuilder` — leaf, no iOS test file; pinned here with nine
 - [x] `FormulaInsightBuilder` + `PatternInsight` — leaf, no iOS test file; pinned here with eight
-- [ ] `InsulinDeliveryContext` — leaf; `InsulinTherapyType` already exists, the rest does not
+- [x] `InsulinDeliveryContext` — leaf, no iOS test file; pinned here with eight. The caller
+      passes the therapy type from the profile where iOS reads UserDefaults
 - [x] `NightscoutOnBoard` ← NightscoutOnBoardTests. The phase-2 walker read three shapes and
       needed IOB and COB on the same row; `parseOnBoard` now delegates to the ported walker
 - [ ] `DailyTherapyReviewService` + `DailyTherapyReviewCache` ← both test files

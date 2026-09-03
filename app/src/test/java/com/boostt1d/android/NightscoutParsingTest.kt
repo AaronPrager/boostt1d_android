@@ -257,4 +257,60 @@ class NightscoutParsingTest {
         assertNull(service.parseTherapyProfile("""{"store":{"Default":{}}}"""))
         assertNull(service.parseTherapyProfile("""{"nonsense":true}"""))
     }
+
+
+    // MARK: - profile.json history (ported from the iOS DiabetesProfileDecodingTests)
+
+    @Test
+    fun `one unreadable history document does not fail the whole profile array`() {
+        val body = """
+            [
+              {
+                "defaultProfile": "Default",
+                "store": {
+                  "Default": {
+                    "dia": 5,
+                    "basal": [{"time":"00:00","value":0.8}],
+                    "carbratio": [{"time":"00:00","value":"10"}],
+                    "sens": [{"timeAsSeconds":0,"value":50}],
+                    "target_low": [{"time":"00:00:00","value":80}],
+                    "target_high": [{"time":"00:00","value":120}]
+                  }
+                }
+              },
+              {
+                "defaultProfile": 12345,
+                "store": "not-an-object",
+                "overridePresets": {"broken": true}
+              }
+            ]
+        """
+
+        val docs = service.parseProfileDocuments(body)
+
+        assertEquals(1, docs.size)
+        assertEquals("Default", docs[0].defaultProfile)
+        val entry = docs[0].store.getValue("Default")
+        assertEquals(0.8, entry.basal.first().value, 0.0)
+        assertEquals(10.0, entry.carbRatio.first().value, 0.0)
+        assertEquals("00:00", entry.sensitivity.first().time)
+        assertEquals("00:00", entry.targetLow.first().time)
+    }
+
+    @Test
+    fun `a single profile object still decodes`() {
+        val docs = service.parseProfileDocuments("""
+            {
+              "defaultProfile": "Work",
+              "store": {
+                "Work": {
+                  "basal": [{"time":"00:00","value":1}]
+                }
+              }
+            }
+        """)
+
+        assertEquals(1, docs.size)
+        assertEquals(1.0, docs[0].store.getValue("Work").basal.first().value, 0.0)
+    }
 }

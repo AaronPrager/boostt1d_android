@@ -35,6 +35,12 @@ enum class InsulinTherapyType(val displayName: String, val detail: String) {
     PUMP("Pump, manual", "You set your own basal rates and decide every bolus."),
     INJECTIONS("Pens or injections", "Long-acting insulin plus doses by pen or syringe.");
 
+    /**
+     * Only an automated system reads as a closed loop. A manual pump sets basal rates but
+     * never changes them on its own, so fasting glucose still measures them.
+     */
+    val isClosedLoop: Boolean get() = this == CLOSED_LOOP
+
     companion object {
         /** Offered in the UI. UNSPECIFIED is a storage state, never a choice. */
         val selectable = listOf(CLOSED_LOOP, PUMP, INJECTIONS)
