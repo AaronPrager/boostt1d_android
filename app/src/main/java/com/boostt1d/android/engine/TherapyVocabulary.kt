@@ -14,7 +14,70 @@ import kotlin.math.abs
 enum class TherapyParameter(val displayName: String, val shortName: String) {
     BASAL("Basal rate", "Basal"),
     ISF("Correction factor (ISF)", "ISF"),
-    CARB_RATIO("Carb ratio (ICR)", "Carb ratio"),
+    CARB_RATIO("Carb ratio (ICR)", "Carb ratio");
+    /**
+     * iOS rawValue. Cache entries and daily-review keys use it so the two apps name the same
+     * finding identically.
+     */
+    val key: String
+        get() = when (this) {
+            BASAL -> "basal"
+            ISF -> "isf"
+            CARB_RATIO -> "carbRatio"
+        }
+
+    /**
+     * What the setting does, named the way someone who has never heard "ISF" would say it.
+     * The clinical name is not wrong, it is just unreadable to most people the first time —
+     * so it moves behind the advanced switch rather than disappearing.
+     */
+    val plainName: String
+        get() = when (this) {
+            BASAL -> "Background insulin"
+            ISF -> "Correction strength"
+            CARB_RATIO -> "Meal insulin"
+        }
+
+    val plainDescription: String
+        get() = when (this) {
+            BASAL -> "The steady insulin running in the background, whether or not you eat."
+            ISF -> "How far one unit of insulin brings your glucose down."
+            CARB_RATIO -> "How much insulin covers the carbs in a meal."
+        }
+
+    /**
+     * The same idea as [plainChangeSentence], compressed to fit a list row beside the time
+     * window. A row has one line for this; the sentence version belongs on the detail screen.
+     */
+    fun shortChangePhrase(increasing: Boolean): String = when (this) {
+        BASAL -> if (increasing) "a little more insulin" else "a little less insulin"
+        ISF -> if (increasing) "smaller corrections" else "larger corrections"
+        CARB_RATIO -> if (increasing) "less insulin for carbs" else "more insulin for carbs"
+    }
+
+    /**
+     * A sentence a person can act on, given which way the number moved.
+     *
+     * Direction is not the same as "more insulin" for all three: a *bigger* correction factor
+     * or carb ratio means *less* insulin, which is exactly the reversal that confuses people
+     * reading raw numbers.
+     */
+    fun plainChangeSentence(increasing: Boolean): String = when (this) {
+        BASAL -> if (increasing) "A little more background insulin during these hours." else "A little less background insulin during these hours."
+        ISF -> if (increasing) "Slightly smaller correction doses." else "Slightly larger correction doses."
+        CARB_RATIO -> if (increasing) "Slightly less insulin for the same amount of carbs." else "Slightly more insulin for the same amount of carbs."
+    }
+
+    /**
+     * Basal is reviewed before the ratios, because a wrong basal makes every ratio look
+     * wrong. The screen orders findings by this.
+     */
+    val reviewRank: Int
+        get() = when (this) {
+            BASAL -> 0
+            ISF -> 1
+            CARB_RATIO -> 2
+        }
 }
 
 @Serializable

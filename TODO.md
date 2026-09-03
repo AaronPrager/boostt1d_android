@@ -3,7 +3,7 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
-237 unit tests and 5 instrumented tests, all green.
+263 unit tests and 5 instrumented tests, all green.
 
 ## Data layer
 
@@ -46,7 +46,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ## Quality
 
-- [x] 237 unit tests, all green
+- [x] 263 unit tests, all green
 - [x] Instrumented tests — 5, against a real SQLite database
 - [ ] Instrumented *UI* tests — the screens are still only checked by hand
 - [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
@@ -169,8 +169,9 @@ dependency graph, so nothing is built on a module that is not yet proven.
 - [ ] `TherapyAnalysisCache` — depends on PatternService
 - [ ] `DoseSuggestionService` — **no test file on iOS**, and gated by `HIDE_DOSE_RECOMMENDATIONS`;
       port with the gate intact and write the tests iOS never had
-- [ ] `TherapySettingsReviewBuilder` ← TherapySettingsReviewBuilderTests (816 lines) — the
-      crown jewel; last, because it depends on everything above
+- [x] `TherapySettingsReviewBuilder` ← TherapySettingsReviewBuilderTests (816 lines) — the
+      crown jewel. Ported before the daily review rather than after it, because the daily
+      review is built *from* its findings; all 26 cases green on first compile
 - [ ] `DiabetesProfileService` — depends on TherapyChangeDetector
 - [ ] `AIGlucoseAnalysisService` — deferred to phase 4 with the rest of the AI path
 - N/A `DefaultsHygieneTests` — iOS UserDefaults hygiene; DataStore has no equivalent problem
