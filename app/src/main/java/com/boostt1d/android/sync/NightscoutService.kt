@@ -1,5 +1,6 @@
 package com.boostt1d.android.sync
 
+import com.boostt1d.android.data.NightscoutOnBoard
 import com.boostt1d.android.data.GlucoseCacheRules
 import com.boostt1d.android.data.NightscoutGlucoseEntry
 import com.boostt1d.android.data.NightscoutProfileDocument
@@ -200,34 +201,19 @@ class NightscoutService(
         val array = runCatching { json.parseToJsonElement(body.trim()).jsonArray }.getOrNull()
             ?: return OnBoard.none
 
-        val documents = array.mapNotNull { it as? JsonObject }
-            .sortedByDescending { doc ->
-                parseTimestamp(doc["created_at"]?.jsonPrimitive?.contentOrNull) ?: 0L
-            }
+        // Newest first, so the freshest row carrying a figure wins. Nightscout usually returns
+        // them that way already; sorting pins the assumption instead of trusting it.
+        val rows = JsonArray(
+            array.mapNotNull { it as? JsonObject }
+                .sortedByDescending { parseTimestamp(it["created_at"]?.jsonPrimitive?.contentOrNull) ?: 0L }
+        )
 
-        for (document in documents) {
-            val at = parseTimestamp(document["created_at"]?.jsonPrimitive?.contentOrNull) ?: continue
-
-            val candidates = listOfNotNull(
-                document["loop"] as? JsonObject,
-                (document["openaps"] as? JsonObject)?.get("suggested") as? JsonObject,
-                (document["openaps"] as? JsonObject)?.get("enacted") as? JsonObject,
-            )
-
-            for (candidate in candidates) {
-                // Loop nests IOB one level deeper than the oref lineage does.
-                val iob = candidate["iob"]?.let { element ->
-                    (element as? JsonObject)?.get("iob")?.jsonPrimitive?.doubleOrNull
-                        ?: (element as? kotlinx.serialization.json.JsonPrimitive)?.doubleOrNull
-                }
-                val cob = candidate["cob"]?.let { element ->
-                    (element as? JsonObject)?.get("cob")?.jsonPrimitive?.doubleOrNull
-                        ?: (element as? kotlinx.serialization.json.JsonPrimitive)?.doubleOrNull
-                }
-                if (iob != null || cob != null) return OnBoard(iob, cob, at)
-            }
-        }
-        return OnBoard.none
+        // Every uploader's shape — Loop, Trio, AAPS, OpenAPS, pump — is read by the shared
+        // walker, and IOB and COB may come from different rows. A figure with no timestamp
+        // cannot be shown as current, so it is dropped rather than dated "now".
+        val reading = NightscoutOnBoard.fromDeviceStatuses(rows, nowIso = "") ?: return OnBoard.none
+        val at = parseTimestamp(reading.time.takeIf { it.isNotEmpty() }) ?: return OnBoard.none
+        return OnBoard(reading.iob, reading.cob, at)
     }
 
     /** The therapy settings from `profile.json`, mapped onto the app's own shape. */

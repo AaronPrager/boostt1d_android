@@ -3,7 +3,7 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
-192 unit tests and 5 instrumented tests, all green.
+227 unit tests and 5 instrumented tests, all green.
 
 ## Data layer
 
@@ -46,7 +46,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ## Quality
 
-- [x] 192 unit tests, all green
+- [x] 227 unit tests, all green
 - [x] Instrumented tests — 5, against a real SQLite database
 - [ ] Instrumented *UI* tests — the screens are still only checked by hand
 - [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
@@ -155,12 +155,14 @@ dependency graph, so nothing is built on a module that is not yet proven.
       all — the detector only *mentions* the service in a comment — so the detector is a leaf
       and the service layers on it. AI wording is gated off exactly as on iOS
       (`aiPatternWordingEnabled = false`); the merge that would apply it arrives in phase 4
-- [ ] `TherapyChangeOutcomeBuilder` ← TherapyChangeOutcomeBuilderTests — "did it work?"
-- [ ] `GlucoseWeeklyReportBuilder` ← GlucoseWeeklyReportComparisonTests — leaf
-- [ ] `WhatHappenedDailyOverviewBuilder` — leaf, no dedicated test file; pin behaviour when porting
-- [ ] `FormulaInsightBuilder` — leaf, no dedicated test file; pin behaviour when porting
+- [x] `TherapyChangeOutcomeBuilder` ← TherapyChangeOutcomeBuilderTests — "did it work?"
+- [x] `GlucoseWeeklyReportBuilder` ← GlucoseWeeklyReportComparisonTests — leaf. Reuses the
+      statistics card's very-high constant rather than declaring a second 250
+- [x] `WhatHappenedDailyOverviewBuilder` — leaf, no iOS test file; pinned here with nine
+- [x] `FormulaInsightBuilder` + `PatternInsight` — leaf, no iOS test file; pinned here with eight
 - [ ] `InsulinDeliveryContext` — leaf; `InsulinTherapyType` already exists, the rest does not
-- [ ] `NightscoutOnBoard` ← NightscoutOnBoardTests — a simplified `OnBoard` exists; check parity
+- [x] `NightscoutOnBoard` ← NightscoutOnBoardTests. The phase-2 walker read three shapes and
+      needed IOB and COB on the same row; `parseOnBoard` now delegates to the ported walker
 - [ ] `DailyTherapyReviewService` + `DailyTherapyReviewCache` ← both test files
 - [ ] `WhatHappenedAnalysisCache` ← WhatHappenedAnalysisCachePersistenceTests
 - [ ] `TherapyAnalysisCache` — depends on PatternService
