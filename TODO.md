@@ -3,7 +3,7 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
-177 unit tests and 5 instrumented tests, all green.
+192 unit tests and 5 instrumented tests, all green.
 
 ## Data layer
 
@@ -46,7 +46,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ## Quality
 
-- [x] 177 unit tests, all green
+- [x] 192 unit tests, all green
 - [x] Instrumented tests — 5, against a real SQLite database
 - [ ] Instrumented *UI* tests — the screens are still only checked by hand
 - [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
@@ -150,8 +150,11 @@ dependency graph, so nothing is built on a module that is not yet proven.
       Persistence sits behind `TherapySnapshotStore` so `engine/` stays Android-free; the
       Nightscout `profile.json` parser now keeps every document with its dates, because that
       list *is* the edit history and flattening it had thrown the history away
-- [ ] `WhatHappenedPatternDetector` + `PatternService` ← PatternClaimIntegrityTests,
-      MealWindowPatternTests, WhatHappenedDurationLabelTests — a mutually dependent pair
+- [x] `WhatHappenedPatternDetector` + `PatternService` ← PatternClaimIntegrityTests,
+      MealWindowPatternTests, WhatHappenedDurationLabelTests. Not a mutual dependency after
+      all — the detector only *mentions* the service in a comment — so the detector is a leaf
+      and the service layers on it. AI wording is gated off exactly as on iOS
+      (`aiPatternWordingEnabled = false`); the merge that would apply it arrives in phase 4
 - [ ] `TherapyChangeOutcomeBuilder` ← TherapyChangeOutcomeBuilderTests — "did it work?"
 - [ ] `GlucoseWeeklyReportBuilder` ← GlucoseWeeklyReportComparisonTests — leaf
 - [ ] `WhatHappenedDailyOverviewBuilder` — leaf, no dedicated test file; pin behaviour when porting
