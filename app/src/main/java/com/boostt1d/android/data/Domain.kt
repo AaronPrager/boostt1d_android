@@ -1,6 +1,7 @@
 package com.boostt1d.android.data
 
 import com.boostt1d.android.sync.DexcomRegion
+import com.boostt1d.android.sync.LibreRegion
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -70,11 +71,8 @@ enum class GlucoseConnectionOption(val displayName: String) {
         }
 
     companion object {
-        /**
-         * What setup offers. Dexcom Share and FreeStyle Libre are not ported yet, and an
-         * option that cannot work is worse than one that is not shown.
-         */
-        val selectableInThisBuild = listOf(NIGHTSCOUT, DEXCOM, MANUAL)
+        /** Every source is now built, so setup offers all of them. */
+        val selectableInThisBuild = listOf(NIGHTSCOUT, DEXCOM, LIBRE, MANUAL)
     }
 }
 
@@ -108,6 +106,10 @@ data class GlucoseSettings(
     val dexcomUsername: String = "",
     /** Share is regional and the hosts do not federate, so this is not a formality. */
     val dexcomRegion: DexcomRegion = DexcomRegion.US,
+    /** LibreLinkUp account email. The password lives in [CredentialStore]. */
+    val libreUsername: String = "",
+    /** Resolved from LibreView's redirect on first sign-in and saved, so it is paid once. */
+    val libreRegion: LibreRegion = LibreRegion.AUTOMATIC,
 ) {
     val isManualMode: Boolean get() = connection == GlucoseConnectionOption.MANUAL
 

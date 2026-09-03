@@ -11,6 +11,7 @@ import com.boostt1d.android.data.Countries
 import com.boostt1d.android.data.CredentialStore
 import com.boostt1d.android.data.GlucoseConnectionOption
 import com.boostt1d.android.sync.DexcomShareService
+import com.boostt1d.android.sync.LibreLinkUpService
 import com.boostt1d.android.sync.NightscoutService
 import com.boostt1d.android.sync.NightscoutUrl
 import com.boostt1d.android.data.GlucoseDisplay
@@ -31,6 +32,7 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
     private val credentials = CredentialStore(application)
     private val nightscout = NightscoutService()
     private val dexcom = DexcomShareService()
+    private val libre = LibreLinkUpService()
 
     var step by mutableStateOf(OnboardingStep.PERSONAL_INFO)
         private set
@@ -138,6 +140,22 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                         result.exceptionOrNull()?.message
                             ?: "Could not sign in to Dexcom Share."
                     }
+                }
+
+                GlucoseConnectionOption.LIBRE -> {
+                    val result = runCatching {
+                        libre.verify(draft.libreUsername, draft.librePassword, draft.libreRegion)
+                    }
+                    connectionTestSucceeded = result.isSuccess
+                    connectionTestResult = result.fold(
+                        onSuccess = { v ->
+                            // The redirect resolved the real region; keep it so setup saves it.
+                            draft = draft.copy(libreRegion = v.region)
+                            "Signed in. Following ${'$'}{v.connectionName}" +
+                                (v.latestMgdl?.let { " — latest reading ${'$'}it mg/dL." } ?: ", but no recent reading yet.")
+                        },
+                        onFailure = { it.message ?: "Could not sign in to LibreLinkUp." },
+                    )
                 }
 
                 else -> Unit
@@ -253,6 +271,12 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 ""
             },
             dexcomRegion = draft.dexcomRegion,
+            libreUsername = if (draft.connection == GlucoseConnectionOption.LIBRE) {
+                draft.libreUsername.trim()
+            } else {
+                ""
+            },
+            libreRegion = draft.libreRegion,
         )
 
         // Credentials go to encrypted storage, never into the settings blob.
@@ -261,6 +285,8 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 credentials.nightscoutToken = draft.nightscoutToken.trim()
             GlucoseConnectionOption.DEXCOM ->
                 credentials.dexcomPassword = draft.dexcomPassword
+            GlucoseConnectionOption.LIBRE ->
+                credentials.librePassword = draft.librePassword
             else -> Unit
         }
 

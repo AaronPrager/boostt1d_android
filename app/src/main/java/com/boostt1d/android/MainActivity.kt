@@ -168,13 +168,15 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         settings = current.settings,
                         currentToken = viewModel.nightscoutToken(),
                         currentDexcomPassword = viewModel.dexcomPassword(),
+                        currentLibrePassword = viewModel.librePassword(),
                         syncing = syncing,
                         lastOutcome = lastOutcome,
                         nowMillis = nowMillis,
                         onTest = viewModel::testNightscout,
                         onTestDexcom = viewModel::testDexcom,
-                        onSave = { updated, token, dexcomPassword ->
-                            viewModel.saveCredentials(token, dexcomPassword)
+                        onTestLibre = viewModel::testLibre,
+                        onSave = { updated, token, dexcomPassword, librePassword ->
+                            viewModel.saveCredentials(token, dexcomPassword, librePassword)
                             viewModel.saveSettings(updated)
                             viewModel.syncNow(updated)
                         },

@@ -54,10 +54,20 @@ class CredentialStore(context: Context) {
             }.apply()
         }
 
+    /** The LibreLinkUp account password. Same reasoning as the others. */
+    var librePassword: String
+        get() = prefs.getString(KEY_LIBRE_PASSWORD, "").orEmpty()
+        set(value) {
+            prefs.edit().apply {
+                if (value.isEmpty()) remove(KEY_LIBRE_PASSWORD) else putString(KEY_LIBRE_PASSWORD, value)
+            }.apply()
+        }
+
     fun clear() = prefs.edit().clear().apply()
 
     private companion object {
         const val KEY_NIGHTSCOUT_TOKEN = "nightscout_token"
         const val KEY_DEXCOM_PASSWORD = "dexcom_password"
+        const val KEY_LIBRE_PASSWORD = "libre_password"
     }
 }

@@ -3,7 +3,7 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
-105 unit tests and 5 instrumented tests, all green.
+151 unit tests and 5 instrumented tests, all green.
 
 ## Data layer
 
@@ -46,7 +46,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ## Quality
 
-- [x] 105 unit tests, all green
+- [x] 151 unit tests, all green
 - [x] Instrumented tests — 5, against a real SQLite database
 - [ ] Instrumented *UI* tests — the screens are still only checked by hand
 - [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
@@ -75,21 +75,54 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ---
 
-# Landed early — Nightscout (phase 2)
+# Phase 2 — Remote sources
 
-Built ahead of the plan's order. Listed separately because its verification is not done.
+All three remote sources — Nightscout, Dexcom Share, LibreLinkUp — plus background sync
+and the reminders behind it. Nightscout is verified against a real site; the other two
+have never met a live account.
 
-- [x] URL normalization, SHA-1 token auth, three auth shapes for glucose
+## Nightscout
+
+- [x] URL normalization, access-token and API_SECRET auth, unauthenticated fallback
 - [x] Capability probe against the three real endpoints, not `/status`
-- [x] Entries (JSON and tab-separated), treatments, `profile.json` parsing
+- [x] Entries (JSON and tab-separated), treatments, `profile.json`, `devicestatus` for IOB/COB
 - [x] Source stitching at read time, so switching source never hides stored history
-- [x] Token in EncryptedSharedPreferences, never in the settings blob
-- [x] Data Source screen, connection test, Sync now, dashboard staleness line
-- [x] Sync on launch
-- [ ] **Verify against a real site.** Only the failure paths have been exercised; the
-      happy path has never run against actual Nightscout data.
-- [ ] Background sync via WorkManager — sync currently happens on launch and on demand
-      only, so a closed app catches nothing
-- [ ] Battery-optimization exemption prompt, and a staleness notification
+- [x] Token in EncryptedSharedPreferences, never in the settings blob, masked on screen
+- [x] **Verified against a real site** — 23 readings, 11 events and insulin doses came down
 - [ ] Handle a site whose history is longer than the retention window without pulling
       all of it on first sync
+
+## Dexcom Share
+
+- [x] Login across every host and application ID for the region, by-id and by-name paths
+- [x] Integer and string trend forms, four timestamp formats
+- [x] Region as a first-class field, because the hosts do not federate
+- [x] Password in EncryptedSharedPreferences, masked on screen
+- [ ] **Verify against a real account.** The login dance is the part most likely to need
+      adjusting, and it has never run against live Share.
+
+## LibreLinkUp
+
+- [x] Login with LibreView's regional redirect followed once and the region saved
+- [x] Terms-not-accepted and client-version-floor recognised as their own failures —
+      neither can be fixed in this app, so neither is retried as if it were transient
+- [x] Connections, the ~12h graph endpoint, the current reading winning a shared timestamp
+- [x] `ValueInMgPerDl`, or `Value` converted from mmol/L when that is all a region sends
+- [x] `Account-Id` as SHA-256 of the user id, `product`/`version` headers
+- [x] Password in EncryptedSharedPreferences, masked on screen
+- [ ] **Verify against a real account.** Abbott's version floor moves; the first real
+      sign-in is the only way to learn whether `4.16.0` is still accepted.
+
+## Background sync and reminders
+
+- [x] WorkManager periodic sync, 15-minute floor, network-constrained, off in manual mode
+- [x] Stale reminder at three-quarters of the source's history window
+- [x] Immediate reminder for rejected credentials
+- [x] Notification permission and battery optimisation surfaced on the Data Source screen
+- [ ] Verify a reminder actually fires — needs a device left alone for 18 hours
+- [ ] Initial-download progress screen for a first sync of a full retention window
+
+## Stored data
+
+- [x] `StoredShapeTest` — older stored JSON keeps decoding when a shape gains a field, so
+      a returning user is never sent through setup as though they were new

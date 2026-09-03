@@ -13,6 +13,9 @@ import com.boostt1d.android.background.SyncReminders
 import com.boostt1d.android.background.SyncScheduler
 import com.boostt1d.android.sync.DexcomRegion
 import com.boostt1d.android.sync.DexcomShareService
+import com.boostt1d.android.sync.LibreLinkUpService
+import com.boostt1d.android.sync.LibreRegion
+import com.boostt1d.android.sync.LibreVerification
 import com.boostt1d.android.sync.NightscoutConnectionReport
 import com.boostt1d.android.sync.NightscoutService
 import com.boostt1d.android.sync.SyncOrchestrator
@@ -86,6 +89,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val credentials = CredentialStore(application)
     private val nightscout = NightscoutService()
     private val dexcom = DexcomShareService()
+    private val libre = LibreLinkUpService()
     private val orchestrator = SyncOrchestrator(nightscout, logs, repository, credentials)
 
     /** Non-null while a sync is running, so the UI can show it without guessing. */
@@ -148,10 +152,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveCredentials(nightscoutToken: String, dexcomPassword: String) {
+    fun saveCredentials(nightscoutToken: String, dexcomPassword: String, librePassword: String) {
         credentials.nightscoutToken = nightscoutToken
         credentials.dexcomPassword = dexcomPassword
+        credentials.librePassword = librePassword
     }
+
+    fun librePassword(): String = credentials.librePassword
+
+    suspend fun testLibre(email: String, password: String, region: LibreRegion): Result<LibreVerification> =
+        runCatching { libre.verify(email, password, region) }
 
     fun nightscoutToken(): String = credentials.nightscoutToken
 

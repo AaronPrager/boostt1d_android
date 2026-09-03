@@ -41,6 +41,8 @@ import com.boostt1d.android.background.SyncReminders
 import com.boostt1d.android.data.GlucoseConnectionOption
 import com.boostt1d.android.data.GlucoseSettings
 import com.boostt1d.android.sync.DexcomRegion
+import com.boostt1d.android.sync.LibreRegion
+import com.boostt1d.android.sync.LibreVerification
 import com.boostt1d.android.logs.EmptyNote
 import com.boostt1d.android.logs.ScreenScaffold
 import com.boostt1d.android.ui.BoostCard
@@ -62,12 +64,14 @@ fun DataSourceScreen(
     settings: GlucoseSettings,
     currentToken: String,
     currentDexcomPassword: String,
+    currentLibrePassword: String,
     syncing: Boolean,
     lastOutcome: SyncOutcome?,
     nowMillis: Long,
     onTest: suspend (String, String) -> NightscoutConnectionReport,
     onTestDexcom: suspend (String, String, DexcomRegion) -> Result<Unit>,
-    onSave: (GlucoseSettings, String, String) -> Unit,
+    onTestLibre: suspend (String, String, LibreRegion) -> Result<LibreVerification>,
+    onSave: (GlucoseSettings, String, String, String) -> Unit,
     onSyncNow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -80,6 +84,9 @@ fun DataSourceScreen(
     var dexcomUsername by remember { mutableStateOf(settings.dexcomUsername) }
     var dexcomPassword by remember { mutableStateOf(currentDexcomPassword) }
     var dexcomRegion by remember { mutableStateOf(settings.dexcomRegion) }
+    var libreUsername by remember { mutableStateOf(settings.libreUsername) }
+    var librePassword by remember { mutableStateOf(currentLibrePassword) }
+    var libreRegion by remember { mutableStateOf(settings.libreRegion) }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testSucceeded by remember { mutableStateOf<Boolean?>(null) }
@@ -89,7 +96,10 @@ fun DataSourceScreen(
         token.trim() != currentToken ||
         dexcomUsername.trim() != settings.dexcomUsername ||
         dexcomPassword != currentDexcomPassword ||
-        dexcomRegion != settings.dexcomRegion
+        dexcomRegion != settings.dexcomRegion ||
+        libreUsername.trim() != settings.libreUsername ||
+        librePassword != currentLibrePassword ||
+        libreRegion != settings.libreRegion
 
     ScreenScaffold(title = "Data Source", subtitle = "Where readings come from", modifier = modifier) {
         item {
@@ -159,12 +169,30 @@ fun DataSourceScreen(
                     onDexcomUsernameChange = { dexcomUsername = it; testResult = null },
                     onDexcomPasswordChange = { dexcomPassword = it; testResult = null },
                     onDexcomRegionChange = { dexcomRegion = it; testResult = null },
+                    libreUsername = libreUsername,
+                    librePassword = librePassword,
+                    libreRegion = libreRegion,
+                    onLibreUsernameChange = { libreUsername = it; testResult = null },
+                    onLibrePasswordChange = { librePassword = it; testResult = null },
+                    onLibreRegionChange = { libreRegion = it; testResult = null },
                     onTest = {
                         scope.launch {
                             testing = true
                             testResult = null
 
-                            if (connection == GlucoseConnectionOption.DEXCOM) {
+                            if (connection == GlucoseConnectionOption.LIBRE) {
+                                val result = onTestLibre(libreUsername.trim(), librePassword, libreRegion)
+                                testSucceeded = result.isSuccess
+                                testResult = result.fold(
+                                    onSuccess = { v ->
+                                        libreRegion = v.region
+                                        "Signed in. Following ${'$'}{v.connectionName}" +
+                                            (v.latestMgdl?.let { " — latest reading ${'$'}it mg/dL." }
+                                                ?: ", but no recent reading yet.")
+                                    },
+                                    onFailure = { it.message ?: "Could not sign in to LibreLinkUp." },
+                                )
+                            } else if (connection == GlucoseConnectionOption.DEXCOM) {
                                 val result = onTestDexcom(
                                     dexcomUsername.trim(), dexcomPassword, dexcomRegion,
                                 )
@@ -206,6 +234,12 @@ fun DataSourceScreen(
                                     ""
                                 },
                                 dexcomRegion = dexcomRegion,
+                                libreUsername = if (connection == GlucoseConnectionOption.LIBRE) {
+                                    libreUsername.trim()
+                                } else {
+                                    ""
+                                },
+                                libreRegion = libreRegion,
                                 // A source change invalidates "last synced": the old
                                 // timestamp described a different source.
                                 lastSyncMillis = if (connection == settings.connection) {
@@ -216,6 +250,7 @@ fun DataSourceScreen(
                             ),
                             token.trim(),
                             dexcomPassword,
+                            librePassword,
                         )
                     },
                     enabled = dirty,

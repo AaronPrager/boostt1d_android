@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.boostt1d.android.data.GlucoseConnectionOption
+import com.boostt1d.android.ui.BoostDropdownField
 import com.boostt1d.android.ui.BoostFieldLabel
 import com.boostt1d.android.ui.BoostSegmented
 import com.boostt1d.android.ui.BoostRadius
@@ -55,6 +56,12 @@ fun ConnectionFields(
     onDexcomUsernameChange: (String) -> Unit,
     onDexcomPasswordChange: (String) -> Unit,
     onDexcomRegionChange: (DexcomRegion) -> Unit,
+    libreUsername: String,
+    librePassword: String,
+    libreRegion: LibreRegion,
+    onLibreUsernameChange: (String) -> Unit,
+    onLibrePasswordChange: (String) -> Unit,
+    onLibreRegionChange: (LibreRegion) -> Unit,
     onTest: () -> Unit,
     testing: Boolean,
     testResult: String?,
@@ -182,6 +189,77 @@ fun ConnectionFields(
                 TestResult(testResult, testSucceeded, colors)
             }
 
+            GlucoseConnectionOption.LIBRE -> {
+                Column(verticalArrangement = Arrangement.spacedBy(BoostSpacing.xs)) {
+                    BoostFieldLabel("LibreLinkUp email")
+                    BoostTextField(
+                        value = libreUsername,
+                        onValueChange = onLibreUsernameChange,
+                        placeholder = "The LibreLinkUp follower account",
+                        keyboardType = KeyboardType.Email,
+                    )
+                    Text(
+                        "LibreLinkUp is Abbott's follower service. Sign in with a LibreLinkUp " +
+                            "account the sensor wearer has invited — which can be your own second " +
+                            "account.",
+                        fontSize = 12.sp,
+                        color = colors.textSecondary,
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(BoostSpacing.xs)) {
+                    BoostFieldLabel("LibreLinkUp password")
+                    BoostTextField(
+                        value = librePassword,
+                        onValueChange = onLibrePasswordChange,
+                        placeholder = "Your LibreLinkUp password",
+                        isSecret = true,
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(BoostSpacing.xs)) {
+                    BoostFieldLabel("Region", isOptional = true)
+                    BoostDropdownField(
+                        selected = libreRegion,
+                        placeholder = "Detect automatically",
+                        options = LibreRegion.entries.toList(),
+                        optionLabel = { it.displayName },
+                        onSelect = onLibreRegionChange,
+                    )
+                    Text(
+                        "Leave on automatic unless sign-in fails: LibreView tells us your " +
+                            "region on the first sign-in and it is remembered.",
+                        fontSize = 12.sp,
+                        color = colors.textSecondary,
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(colors.high.copy(alpha = 0.10f), RoundedCornerShape(BoostRadius.md))
+                        .padding(BoostSpacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(BoostSpacing.xxs),
+                ) {
+                    Text(
+                        "LibreLinkUp keeps about twelve hours",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textPrimary,
+                    )
+                    Text(
+                        "Half of Dexcom's window. A phone left closed overnight can lose " +
+                            "readings, so background sync and notifications matter more here " +
+                            "than for any other source.",
+                        fontSize = 12.sp,
+                        color = colors.textSecondary,
+                    )
+                }
+
+                TestButton(onTest, testing, colors, enabled = libreUsername.isNotBlank())
+                TestResult(testResult, testSucceeded, colors)
+            }
+
             GlucoseConnectionOption.MANUAL -> {
                 Column(
                     modifier = Modifier
@@ -220,11 +298,13 @@ private fun SourceOption(
     val icon: ImageVector = when (option) {
         GlucoseConnectionOption.NIGHTSCOUT -> Icons.Filled.Cloud
         GlucoseConnectionOption.DEXCOM -> Icons.Filled.Sensors
+        GlucoseConnectionOption.LIBRE -> Icons.Filled.Sensors
         else -> Icons.Filled.TouchApp
     }
     val detail = when (option) {
         GlucoseConnectionOption.NIGHTSCOUT -> "Readings, events and insulin doses"
         GlucoseConnectionOption.DEXCOM -> "Readings only, about a day of history"
+        GlucoseConnectionOption.LIBRE -> "Readings only, about twelve hours of history"
         else -> "You log everything yourself"
     }
 

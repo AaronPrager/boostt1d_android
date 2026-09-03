@@ -42,13 +42,53 @@ class SyncOrchestrator(
     private val profiles: ProfileRepository,
     private val credentials: CredentialStore,
     private val dexcom: DexcomShareService = DexcomShareService(),
+    private val libre: LibreLinkUpService = LibreLinkUpService(),
 ) {
     suspend fun sync(settings: GlucoseSettings, nowMillis: Long = System.currentTimeMillis()): SyncOutcome =
         when (settings.connection) {
             GlucoseConnectionOption.NIGHTSCOUT -> syncNightscout(settings, nowMillis)
             GlucoseConnectionOption.DEXCOM -> syncDexcom(settings, nowMillis)
+            GlucoseConnectionOption.LIBRE -> syncLibre(settings, nowMillis)
             else -> SyncOutcome.NotConfigured
         }
+
+    /**
+     * LibreLinkUp serves about twelve hours and, like Dexcom, readings only. The region
+     * LibreView redirected to is saved back, so the next sync skips the redirect.
+     */
+    private suspend fun syncLibre(settings: GlucoseSettings, nowMillis: Long): SyncOutcome {
+        val email = settings.libreUsername.ifBlank { return SyncOutcome.NotConfigured }
+        val password = credentials.librePassword.ifBlank { return SyncOutcome.NotConfigured }
+
+        val (servedRegion, entries) = try {
+            libre.fetchGlucose(email, password, settings.libreRegion)
+        } catch (e: LibreException.InvalidCredentials) {
+            return SyncOutcome.Failed(e.message ?: "LibreLinkUp rejected those details.", unauthorized = true)
+        } catch (e: LibreException.TermsNotAccepted) {
+            // Not a credential problem and not transient: only Abbott's own app clears it.
+            return SyncOutcome.Failed(e.message ?: "LibreLinkUp needs its terms accepted.", unauthorized = true)
+        } catch (e: LibreException.NoGlucoseData) {
+            // A quiet sensor is not a broken connection. Record the sync so staleness is
+            // measured from now, and report nothing new.
+            profiles.saveSettings(settings.copy(lastSyncMillis = nowMillis))
+            return SyncOutcome.Success(0, 0, false, listOf("events and insulin doses (LibreLinkUp provides readings only)"))
+        } catch (e: LibreException) {
+            return SyncOutcome.Failed(e.message ?: "Could not reach LibreLinkUp.", unauthorized = false)
+        } catch (e: IOException) {
+            return SyncOutcome.Failed(NightscoutService.friendlyError(e), unauthorized = false)
+        }
+
+        logs.upsertRemoteReadings(entries, GlucoseSourceTag.LIBRE)
+        logs.trimHistory(nowMillis)
+        profiles.saveSettings(settings.copy(lastSyncMillis = nowMillis, libreRegion = servedRegion))
+
+        return SyncOutcome.Success(
+            readings = entries.size,
+            treatments = 0,
+            therapyUpdated = false,
+            skipped = listOf("events and insulin doses (LibreLinkUp provides readings only)"),
+        )
+    }
 
     /**
      * Dexcom Share serves readings and nothing else — no treatments, no therapy settings.
