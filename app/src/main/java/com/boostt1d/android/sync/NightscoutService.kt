@@ -273,7 +273,10 @@ class NightscoutService(
                 throw NightscoutException("The site rejected the access token.", unauthorized = true)
             }
             if (!response.isSuccessful) {
-                throw NightscoutException(httpMessage(response.code))
+                // The body is read only to repeat a short plain-text explanation the site
+                // gave ("This Nightscout site is inactive."); a status code alone sent one
+                // user hunting through the app for a bug that was a mistyped address.
+                throw NightscoutException(httpMessage(response.code, runCatching { response.body?.string() }.getOrNull()))
             }
             return response.body?.string() ?: throw NightscoutException("The site returned nothing.")
         }
@@ -463,12 +466,26 @@ class NightscoutService(
                 .apply { timeZone = TimeZone.getTimeZone("UTC") }
                 .format(Date(millis))
 
-        fun httpMessage(code: Int): String = when (code) {
-            400 -> "The site did not understand the request."
-            404 -> "No Nightscout API at that address. Check the URL."
-            429 -> "The site is rate limiting requests. Try again shortly."
-            in 500..599 -> "The site reported an error. It may be waking up — try again shortly."
-            else -> "The site returned an unexpected response ($code)."
+        fun httpMessage(code: Int, body: String? = null): String {
+            val base = when (code) {
+                400 -> "The site did not understand the request."
+                404 -> "No Nightscout API at that address. Check the URL."
+                410 -> "That Nightscout site is no longer active. Check the URL."
+                429 -> "The site is rate limiting requests. Try again shortly."
+                in 500..599 -> "The site reported an error. It may be waking up — try again shortly."
+                else -> "The site returned an unexpected response ($code)."
+            }
+            val said = siteSaid(body) ?: return base
+            return "$base The site said: “$said”"
+        }
+
+        /** A short plain-text body worth repeating to the user; never HTML, JSON or anything long. */
+        internal fun siteSaid(body: String?): String? {
+            val text = body?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            if (text.startsWith("<") || text.startsWith("{") || text.startsWith("[")) return null
+            val line = text.lineSequence().first().trim()
+            if (line.isEmpty() || line.length > 160 || line.any { it.isISOControl() }) return null
+            return line
         }
 
         fun friendlyError(error: IOException): String {
