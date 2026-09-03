@@ -3,7 +3,7 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
-162 unit tests and 5 instrumented tests, all green.
+177 unit tests and 5 instrumented tests, all green.
 
 ## Data layer
 
@@ -46,7 +46,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ## Quality
 
-- [x] 162 unit tests, all green
+- [x] 177 unit tests, all green
 - [x] Instrumented tests — 5, against a real SQLite database
 - [ ] Instrumented *UI* tests — the screens are still only checked by hand
 - [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
@@ -146,7 +146,10 @@ dependency graph, so nothing is built on a module that is not yet proven.
 ## 3a — engine (no UI)
 
 - [x] `MealOutcomeBuilder` ← MealOutcomeBuilderTests — leaf; meals joined to their glucose curves
-- [ ] `TherapyChangeDetector` ← TherapyChangeDetectorTests — leaf; notices a setting changed
+- [x] `TherapyChangeDetector` ← TherapyChangeDetectorTests — leaf; notices a setting changed.
+      Persistence sits behind `TherapySnapshotStore` so `engine/` stays Android-free; the
+      Nightscout `profile.json` parser now keeps every document with its dates, because that
+      list *is* the edit history and flattening it had thrown the history away
 - [ ] `WhatHappenedPatternDetector` + `PatternService` ← PatternClaimIntegrityTests,
       MealWindowPatternTests, WhatHappenedDurationLabelTests — a mutually dependent pair
 - [ ] `TherapyChangeOutcomeBuilder` ← TherapyChangeOutcomeBuilderTests — "did it work?"

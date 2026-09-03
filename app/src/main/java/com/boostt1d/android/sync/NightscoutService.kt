@@ -2,6 +2,8 @@ package com.boostt1d.android.sync
 
 import com.boostt1d.android.data.GlucoseCacheRules
 import com.boostt1d.android.data.NightscoutGlucoseEntry
+import com.boostt1d.android.data.NightscoutProfileDocument
+import com.boostt1d.android.data.ProfileStoreEntry
 import com.boostt1d.android.data.NightscoutTreatment
 import com.boostt1d.android.data.OnBoard
 import com.boostt1d.android.data.TherapyProfile
@@ -16,6 +18,7 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -343,35 +346,63 @@ class NightscoutService(
     }
 
     /**
-     * `profile.json` is either one document or an array of historical ones. The newest
-     * usable document wins; unreadable history rows are skipped rather than failing the
-     * whole payload.
+     * The flattened current settings: the first usable document in the order Nightscout returns
+     * them, which is newest first. Kept for the callers that only need "what are the settings".
      */
-    internal fun parseTherapyProfile(body: String): TherapyProfile? {
-        val root = runCatching { json.parseToJsonElement(body.trim()) }.getOrNull() ?: return null
+    internal fun parseTherapyProfile(body: String): TherapyProfile? =
+        parseProfileDocuments(body).firstNotNullOfOrNull { it.toTherapyProfile() }
+
+    /** The therapy settings from `profile.json`, as documents with their dates intact. */
+    suspend fun fetchProfileDocuments(url: String, token: String): List<NightscoutProfileDocument> =
+        withContext(Dispatchers.IO) {
+            val body = firstWorkingStrategy(
+                url, "/api/v1/profile.json", emptyList(), NightscoutUrl.therapyStrategies(token),
+            )
+            parseProfileDocuments(body)
+        }
+
+    /**
+     * `profile.json` is either one document or an array of historical ones. Every document is
+     * kept — with its `mills`, `startDate` and `created_at` — because the list *is* the user's
+     * edit history, and the change detector reads changes out of it that happened before the
+     * app was installed. Unreadable rows are skipped rather than failing the whole payload.
+     */
+    internal fun parseProfileDocuments(body: String): List<NightscoutProfileDocument> {
+        val root = runCatching { json.parseToJsonElement(body.trim()) }.getOrNull() ?: return emptyList()
         val documents: List<JsonObject> = when (root) {
             is JsonArray -> root.mapNotNull { it as? JsonObject }
             is JsonObject -> listOf(root)
-            else -> return null
+            else -> return emptyList()
         }
 
-        for (document in documents) {
-            val store = document["store"] as? JsonObject ?: continue
-            val defaultName = document["defaultProfile"]?.jsonPrimitive?.contentOrNull
-            val chosen = (defaultName?.let { store[it] } ?: store.values.firstOrNull()) as? JsonObject ?: continue
+        return documents.mapNotNull { document ->
+            val store = (document["store"] as? JsonObject) ?: return@mapNotNull null
+            val entries = store.mapNotNull { (name, raw) ->
+                val obj = raw as? JsonObject ?: return@mapNotNull null
+                name to ProfileStoreEntry(
+                    units = obj["units"]?.jsonPrimitive?.contentOrNull,
+                    dia = obj["dia"]?.jsonPrimitive?.doubleOrNull,
+                    basal = timeValues(obj, "basal"),
+                    carbRatio = timeValues(obj, "carbratio").ifEmpty { timeValues(obj, "carb_ratio") },
+                    sensitivity = timeValues(obj, "sens").ifEmpty { timeValues(obj, "sensitivity") },
+                    targetLow = timeValues(obj, "target_low"),
+                    targetHigh = timeValues(obj, "target_high"),
+                )
+            }.toMap()
 
-            val profile = TherapyProfile(
-                basal = timeValues(chosen, "basal"),
-                carbRatio = timeValues(chosen, "carbratio").ifEmpty { timeValues(chosen, "carb_ratio") },
-                sensitivity = timeValues(chosen, "sens").ifEmpty { timeValues(chosen, "sensitivity") },
-                targetLow = timeValues(chosen, "target_low"),
-                targetHigh = timeValues(chosen, "target_high"),
-                dia = chosen["dia"]?.jsonPrimitive?.doubleOrNull,
-                source = TherapyProfile.Source.NIGHTSCOUT,
+            NightscoutProfileDocument(
+                id = document["_id"]?.let { idElement ->
+                    (idElement as? JsonObject)?.get("\$oid")?.jsonPrimitive?.contentOrNull
+                        ?: idElement.jsonPrimitive.contentOrNull
+                },
+                defaultProfile = document["defaultProfile"]?.jsonPrimitive?.contentOrNull,
+                store = entries,
+                mills = document["mills"]?.jsonPrimitive?.let { it.longOrNull ?: it.contentOrNull?.toLongOrNull() },
+                startDate = document["startDate"]?.jsonPrimitive?.contentOrNull,
+                createdAt = document["created_at"]?.jsonPrimitive?.contentOrNull,
+                units = document["units"]?.jsonPrimitive?.contentOrNull,
             )
-            if (!profile.isEmpty) return profile
         }
-        return null
     }
 
     /**
