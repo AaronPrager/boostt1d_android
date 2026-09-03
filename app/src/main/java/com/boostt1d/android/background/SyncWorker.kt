@@ -104,6 +104,12 @@ object SyncScheduler {
 
     fun schedule(context: Context) {
         val request = PeriodicWorkRequestBuilder<SyncWorker>(INTERVAL_MINUTES, TimeUnit.MINUTES)
+            // Periodic work fires immediately on first enqueue, but the source has only ever
+            // been configured from the foreground, which syncs at that moment. Running again
+            // at once duplicates a full 14-day fetch — and on Dexcom or Libre, a second login
+            // against a lockout counter right as the user typed their password. Waiting one
+            // interval costs nothing: the next useful sync is fifteen minutes out either way.
+            .setInitialDelay(INTERVAL_MINUTES, TimeUnit.MINUTES)
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
