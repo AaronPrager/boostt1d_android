@@ -3,7 +3,7 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
-272 unit tests and 5 instrumented tests, all green.
+283 unit tests and 5 instrumented tests, all green.
 
 ## Data layer
 
@@ -46,7 +46,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ## Quality
 
-- [x] 272 unit tests, all green
+- [x] 283 unit tests, all green
 - [x] Instrumented tests — 5, against a real SQLite database
 - [ ] Instrumented *UI* tests — the screens are still only checked by hand
 - [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
@@ -171,8 +171,8 @@ dependency graph, so nothing is built on a module that is not yet proven.
       `AnalysisCacheStore`; the app supplies the cache-directory file
 - [ ] `TherapyAnalysisCache` — deferred to phase 4: it caches `AITherapySuggestions`, the AI
       dose-analysis response, which does not exist until the AI path does
-- [ ] `DoseSuggestionService` — **no test file on iOS**, and gated by `HIDE_DOSE_RECOMMENDATIONS`;
-      port with the gate intact and write the tests iOS never had
+- [x] `DoseSuggestionService` — no iOS test file; gated by `HIDE_DOSE_RECOMMENDATIONS` and
+      pinned here with eleven tests, one of which asserts the flag is still on
 - [x] `TherapySettingsReviewBuilder` ← TherapySettingsReviewBuilderTests (816 lines) — the
       crown jewel. Ported before the daily review rather than after it, because the daily
       review is built *from* its findings; all 26 cases green on first compile
@@ -185,7 +185,9 @@ dependency graph, so nothing is built on a module that is not yet proven.
 ## 3b — screens on top
 
 - [ ] `WhatHappenedReportView` (2,032) — the week in review, four tabs
-- [ ] `TherapyAdjustmentView` (1,919) — the therapy review
+- N/A `TherapyAdjustmentView` (1,919) — dead on iOS: only its own #Preview instantiates it. The
+      Insights tab shows `WhatHappenedReportView`, whose Therapy page is the review. Not ported.
+      `PatternInsightCard` is only used by it and is likewise skipped
 - [ ] Review sections, outcome section, `PatternInsightCard`
 - [ ] `MultiDayOverlayChartView`
 - [ ] Insights tab restored to the shell once there is something behind it
