@@ -1,6 +1,7 @@
 package com.boostt1d.android.sync
 
 import android.util.Base64
+import android.util.Log
 import com.boostt1d.android.data.Config
 import com.boostt1d.android.data.FoodAnalysis
 import com.boostt1d.android.data.FoodAnalysisParsing
@@ -102,8 +103,17 @@ class BoostBackend(
     /** One POST; anything but 200 becomes a [BackendException] with the message iOS shows for that status. */
     private fun post(url: String, jsonBody: String, endpointName: String): String {
         val request = Request.Builder().url(url).post(jsonBody.toRequestBody(jsonMedia)).header("Content-Type", "application/json").build()
-        client.newCall(request).execute().use { response ->
+        // Status and sizes only. Bodies carry a week of health data and never go to the log.
+        Log.i(TAG, "POST ${url.substringAfter("boostt1d.com")} (${jsonBody.length} chars)")
+        val response = try {
+            client.newCall(request).execute()
+        } catch (e: IOException) {
+            Log.w(TAG, "POST failed: ${e.javaClass.simpleName}: ${e.message}")
+            throw e
+        }
+        response.use { response ->
             val text = response.body?.string() ?: ""
+            Log.i(TAG, "→ ${response.code} (${text.length} chars)")
             if (response.code != 200) {
                 val message = when (response.code) {
                     401 -> "AI service authentication failed. Please try again later."
@@ -190,5 +200,9 @@ class BoostBackend(
         val text = requestGeminiText(prompt)
         val extracted = FoodAnalysisParsing.extractJson(text) ?: throw BackendException(0, "The pattern review could not be read.")
         return json.decodeFromString(AIPatternResponse.serializer(), extracted)
+    }
+
+    private companion object {
+        const val TAG = "BoostBackend"
     }
 }

@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -29,7 +32,12 @@ import com.boostt1d.android.home.HomeDestination
 import com.boostt1d.android.home.HomeShell
 import com.boostt1d.android.food.FoodHost
 import com.boostt1d.android.food.FoodStart
+import com.boostt1d.android.sync.InitialDataDownloadScreen
+import com.boostt1d.android.bolus.BolusPrefill
+import com.boostt1d.android.data.GlucoseConnectionOption
 import com.boostt1d.android.insights.InsightsScreen
+import com.boostt1d.android.doctor.DoctorVisitScreen
+import com.boostt1d.android.doctor.DoctorVisitShare
 import com.boostt1d.android.logs.AddEventDialog
 import com.boostt1d.android.logs.AddReadingDialog
 import com.boostt1d.android.logs.EventLogScreen
@@ -69,11 +77,22 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
     val lastOutcome by viewModel.lastOutcome.collectAsStateWithLifecycle()
     val onBoard by viewModel.onBoard.collectAsStateWithLifecycle()
     val report by viewModel.reportSnapshot.collectAsStateWithLifecycle()
+    val doctorReport by viewModel.doctorReport.collectAsStateWithLifecycle()
+    val doctorLoading by viewModel.doctorLoading.collectAsStateWithLifecycle()
+    val doctorCoverage by viewModel.doctorCoverage.collectAsStateWithLifecycle()
+    val doctorEntries by viewModel.doctorEntries.collectAsStateWithLifecycle()
+    val doctorQuestions by viewModel.doctorQuestions.collectAsStateWithLifecycle()
+    val pdfExporting by viewModel.pdfExporting.collectAsStateWithLifecycle()
+    val pdfReady by viewModel.pdfReady.collectAsStateWithLifecycle()
+    val pdfError by viewModel.pdfError.collectAsStateWithLifecycle()
     val reportLoading by viewModel.reportLoading.collectAsStateWithLifecycle()
     val advancedDetail by viewModel.advancedTherapyDetail.collectAsStateWithLifecycle()
     val aiReviewLoading by viewModel.aiReviewLoading.collectAsStateWithLifecycle()
 
     var destination by remember { mutableStateOf(HomeDestination.DASHBOARD) }
+    // Carried from Snap a Meal into the calculator; cleared whenever the shell navigates,
+    // so the menu's own calculator starts empty.
+    var bolusPrefill by remember { mutableStateOf<BolusPrefill?>(null) }
     var showingAddReading by remember { mutableStateOf(false) }
     var showingAddEvent by remember { mutableStateOf(false) }
 
@@ -84,6 +103,19 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
         while (true) {
             nowMillis = System.currentTimeMillis()
             delay(30_000)
+        }
+    }
+
+    // A pending full download owns the screen: the dashboard is deliberately not mounted,
+    // since its own sync would race the one this screen is running.
+    val downloadReason by viewModel.initialDownloadReason.collectAsStateWithLifecycle()
+    (state as? AppState.Ready)?.let { ready ->
+        if (downloadReason != null && ready.settings.connection != GlucoseConnectionOption.MANUAL) {
+            // Keyed on the reason alone: the sync itself writes lastSyncMillis into settings,
+            // and keying on those would restart the download every time it finished a pass.
+            val download = remember(downloadReason) { viewModel.newInitialDownload(ready.settings) }
+            InitialDataDownloadScreen(download, ready.settings.connection, onFinished = { viewModel.finishInitialDownload() })
+            return
         }
     }
 
@@ -108,7 +140,7 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                 destination = HomeDestination.DASHBOARD
             }
 
-            HomeShell(destination = destination, onSelect = { destination = it }) { modifier ->
+            HomeShell(destination = destination, onSelect = { bolusPrefill = null; destination = it }) { modifier ->
                 when (destination) {
                     HomeDestination.DASHBOARD -> DashboardScreen(
                         profile = current.profile,
@@ -134,7 +166,7 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         unit = current.profile.bgUnit,
                         nowMillis = nowMillis,
                         onImportTreatments = viewModel::importCarbsIntoFoodLog,
-                        onOpenBolusCalculator = { destination = HomeDestination.BOLUS_CALCULATOR },
+                        onOpenBolusCalculator = { bolusPrefill = it; destination = HomeDestination.BOLUS_CALCULATOR },
                         onOpenTherapyProfile = { destination = HomeDestination.THERAPY_PROFILE },
                         modifier = modifier,
                     )
@@ -150,6 +182,40 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         modifier = modifier,
                     )
 
+                    HomeDestination.DOCTOR_VISIT -> {
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        // A finished PDF opens the system share sheet once, then is consumed.
+                        LaunchedEffect(pdfReady) {
+                            val file = pdfReady ?: return@LaunchedEffect
+                            viewModel.consumePdf()
+                            DoctorVisitShare.share(context, file)
+                        }
+                        pdfError?.let { message ->
+                            AlertDialog(
+                                onDismissRequest = { viewModel.dismissPdfError() },
+                                confirmButton = { TextButton(onClick = { viewModel.dismissPdfError() }) { Text("OK") } },
+                                title = { Text("Couldn’t create PDF") },
+                                text = { Text(message) },
+                            )
+                        }
+                        DoctorVisitScreen(
+                            report = doctorReport,
+                            loading = doctorLoading,
+                            patternCoverageLabel = doctorCoverage,
+                            agpEntries = doctorEntries,
+                            questions = doctorQuestions,
+                            exporting = pdfExporting,
+                            unit = current.profile.bgUnit,
+                            lowMgdl = current.settings.lowGlucose,
+                            highMgdl = current.settings.highGlucose,
+                            nowMillis = nowMillis,
+                            onPeriodChange = { viewModel.loadDoctorReport(it, current.settings, current.profile) },
+                            onRefresh = { viewModel.reloadDoctorReport(current.settings, current.profile) },
+                            onQuestionsChange = { viewModel.saveDoctorQuestions(it) },
+                            onExport = { viewModel.exportDoctorVisitPdf(current.settings, current.profile) },
+                            modifier = modifier,
+                        )
+                    }
                     HomeDestination.BLOOD_GLUCOSE -> GlucoseLogScreen(
                         logs = logs,
                         unit = current.profile.bgUnit,
@@ -176,6 +242,7 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         lowMgdl = current.settings.lowGlucose,
                         highMgdl = current.settings.highGlucose,
                         nowMillis = nowMillis,
+                        prefill = bolusPrefill,
                         modifier = modifier,
                     )
 

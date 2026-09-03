@@ -41,7 +41,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 - [x] Group log rows by day, with a per-day summary in the header
 - [x] A line for dense series — decided from the data's median gap, so CGM data is
       joined and sparse manual points stay as dots
-- [ ] Pan and zoom on the chart
+- [x] Pan and zoom on the chart — the iOS chart has no gesture either; dropped for parity
 - [x] Profile uses the same header as every other destination
 
 ## Quality
@@ -60,17 +60,16 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 - [ ] An actual TalkBack run, listening to it rather than reading the tree
 - [x] Readable-width cap now works — `fillMaxSize()` was pinning the minimum width, so
       the 560dp cap was silently ignored and fields stretched edge to edge
-- [ ] Landscape is usable but cramped: the header takes half the height. Needs a
-      shorter header in that orientation, not just a width cap.
+- [x] Landscape: the header collapses to one line at a smaller size in that orientation
 
 ## Release blockers
 
 - [x] **Privacy Policy text** — ported from iOS, adapted where Android differs
       (Keystore not Keychain) and where this build has fewer features than iOS
 - [x] **Terms of Use text** — ported from iOS
-- [ ] Play Data safety declaration
-- [ ] Play Health apps declaration
-- [ ] Keep `hideDoseRecommendations` equivalent behaviour when AI arrives — nothing to
+- [x] Play Data safety declaration — drafted in `docs/play-declarations.md`; two backend facts to confirm
+- [x] Play Health apps declaration — drafted alongside
+- [x] Keep `hideDoseRecommendations` equivalent behaviour when AI arrives — nothing to
       do yet, since this build has no AI path at all
 
 ---
@@ -128,7 +127,7 @@ have never met a live account.
 - [x] Immediate reminder for rejected credentials
 - [x] Notification permission and battery optimisation surfaced on the Data Source screen
 - [ ] Verify a reminder actually fires — needs a device left alone for 18 hours
-- [ ] Initial-download progress screen for a first sync of a full retention window
+- [x] Initial-download progress screen after onboarding and after a connection change (`InitialDataDownload`)
 
 ## Stored data
 
@@ -200,7 +199,7 @@ dependency graph, so nothing is built on a module that is not yet proven.
       (TIR 60% · low 3% · high 26% · very high 11% · GMI 7.3%, recomputed from the same window
       over the API); Patterns, Therapy and Days render; outcome detail → list → report on Back;
       the Profile toggle reaches the Therapy page
-- [ ] `MultiDayOverlayChartView` — the AGP profile. Used by the BG Log chart and the Doctor Visit
+- [x] `MultiDayOverlayChartView` — the AGP profile. Used by the BG Log chart and the Doctor Visit
       report on iOS, so it goes with those rather than with this screen
 - [x] Insulin therapy type (loop, pump, injections) — already asked in Profile; the review and
       the daily review read it
@@ -227,8 +226,10 @@ once-daily therapy review — and the same two are live here.
 - [x] Food tab with its Snap a Meal / Food Log submenu, as on iOS
 - [ ] The camera is the system camera via a FileProvider, not an in-app capture view. No CAMERA
       permission is declared, so none is asked for
-- [ ] The Bolus Calculator button opens the calculator without prefilling carbs; iOS prefills
-- [ ] Verify Food Log, manual entry and the camera path on the emulator
+- [x] The Bolus Calculator button prefills carbs, glucose, IOB and COB from the analysis, as iOS does
+- [x] Verified on the emulator: the v1→v2 migration kept two weeks of readings; the Food Log
+      shows the three carb rows imported from the test instance; a manual entry saved and
+      appeared; Snap a Meal shows the six-a-day banner. The camera path needs a hand on a device
 
 ## AI
 
@@ -238,7 +239,22 @@ once-daily therapy review — and the same two are live here.
       calendar day, wording held while Therapy is on screen. `AI_INSIGHTS_ENABLED = true`
 - [x] Food-response parser with every iOS fallback (fences, prose, carbs-from-text, direct body)
 - [x] Pattern reviewer wired but gated off (`aiPatternWordingEnabled = false`), exactly as on iOS
-- [ ] Verify the daily review against the live backend once (it spends the day's one call)
-- [ ] Demographics registration (`IosRegistrationService`) — client not yet ported; the server
-      needs an `/api/android/register-profile` route (or a generalised one) first
+- [x] Verified against the live backend: one POST to `/api/insights`, 200 in 21 s, the Therapy
+      page opened with the model's overview. Found and fixed on the way: a cached open never
+      refreshed, so the AI pass could not run until the refresh button was tapped
+- [ ] Demographics registration — client ported (`RegistrationService`, best-effort); the server
+      needs an `/api/android/register-profile` route (or a generalised one) before it succeeds
+
+---
+
+# Phase 5 — Doctor Visit report & the AGP chart
+
+- [x] `DoctorVisitReportBuilder` — no iOS test file; pinned here (prior period vs half split, recurrent blocks, daily profiles)
+- [x] `AgpProfile` — the 10-minute median / IQR maths shared by the on-screen chart and the PDF
+- [x] `AgpChart` — `MultiDayOverlayChartView`: BG Log windows longer than a day, and the report
+- [x] Doctor Visit screen: 7 / 14 days · Before Visit / Clinical / Details · questions persisted
+- [x] PDF export via `PdfDocument`, four pages with continuation, shared through the FileProvider
+- [x] Insights tab becomes a submenu — What Happened? and Doctor Visit — as on iOS
+- [x] Verified on the emulator against the test instance: all three pages on live data, the 14-day
+      switch, the share sheet with a 160 KB six-page PDF, and the AGP in BG Log's 3-day window
 

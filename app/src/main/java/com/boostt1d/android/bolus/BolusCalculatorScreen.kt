@@ -42,6 +42,7 @@ import com.boostt1d.android.ui.BoostTextField
 import com.boostt1d.android.ui.BoostTheme
 import com.boostt1d.android.ui.Fmt
 import java.util.Calendar
+import java.util.Locale
 
 /**
  * A suggested dose from the numbers you enter.
@@ -60,14 +61,16 @@ fun BolusCalculatorScreen(
     lowMgdl: Double,
     highMgdl: Double,
     nowMillis: Long,
+    /** From Snap a Meal; null when opened from the menu, so every field starts empty. */
+    prefill: BolusPrefill? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = BoostTheme.colors
 
-    var carbsText by remember { mutableStateOf("") }
-    var glucoseText by remember { mutableStateOf("") }
-    var iobText by remember { mutableStateOf("") }
-    var cobText by remember { mutableStateOf("") }
+    var carbsText by remember(prefill) { mutableStateOf(prefill?.let { String.format(Locale.US, "%.1f", it.carbsGrams) } ?: "") }
+    var glucoseText by remember(prefill) { mutableStateOf(prefill?.glucoseMgdl?.let { GlucoseDisplay.format(it.toDouble(), unit) } ?: "") }
+    var iobText by remember(prefill) { mutableStateOf(prefill?.let { String.format(Locale.US, "%.1f", it.iob) } ?: "") }
+    var cobText by remember(prefill) { mutableStateOf(prefill?.let { String.format(Locale.US, "%.1f", it.cob) } ?: "") }
 
     // Scheduled values for right now, so the ratios match the time of day the meal is at.
     val minutesNow = Calendar.getInstance().let {

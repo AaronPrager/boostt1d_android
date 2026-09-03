@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The one private cache directory the system camera may write a meal photo into. -->
+<!-- Private cache directories: the system camera writes a meal photo into one, the Doctor
+     Visit PDF is shared from the other. -->
 <paths>
     <cache-path name="camera" path="camera/" />
+    <cache-path name="pdf" path="pdf/" />
 </paths>

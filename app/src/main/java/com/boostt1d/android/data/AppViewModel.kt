@@ -24,7 +24,16 @@ import com.boostt1d.android.sync.SyncOrchestrator
 import com.boostt1d.android.sync.SyncOutcome
 import com.boostt1d.android.engine.DailyTherapyReviewCache
 import com.boostt1d.android.engine.PatternService
+import com.boostt1d.android.engine.DoctorVisitPeriod
+import com.boostt1d.android.engine.DoctorVisitReport
+import com.boostt1d.android.engine.DoctorVisitReportBuilder
+import com.boostt1d.android.engine.DoctorVisitTherapySnapshot
+import com.boostt1d.android.engine.MealOutcomeBuilder
+import com.boostt1d.android.doctor.DoctorVisitPdf
+import java.io.File
+import com.boostt1d.android.sync.InitialDataDownload
 import com.boostt1d.android.sync.BoostBackend
+import com.boostt1d.android.sync.RegistrationService
 import com.boostt1d.android.engine.TherapyChangeDetector
 import com.boostt1d.android.engine.TherapyGlucoseFormatter
 import com.boostt1d.android.engine.WhatHappenedAnalysisCache
@@ -121,8 +130,76 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val aiReviewer: BoostBackend? get() = if (Config.AI_INSIGHTS_ENABLED) backend else null
     private val patternService by lazy { PatternService(reviewer = aiReviewer) }
     private val reportLoader by lazy {
-        WhatHappenedReportLoader(patternService, detector, analysisCache, dailyReviewCache = dailyReviewCache, dailyReviewer = aiReviewer)
+        WhatHappenedReportLoader(
+            patternService, detector, analysisCache, dailyReviewCache = dailyReviewCache, dailyReviewer = aiReviewer,
+            onEnriched = { source, note -> android.util.Log.i("BoostInsights", "daily review: $source${note?.let { " — $it" } ?: ""}") },
+        )
     }
+
+    // Demographics registration: best-effort, never on the critical path of anything.
+    private val registration by lazy { RegistrationService(foodStores) }
+    private fun registrationPayload(profile: UserProfile, settings: GlucoseSettings, marketingOptIn: Boolean): RegistrationPayload? =
+        RegistrationPayloads.from(
+            profile, settings, marketingOptIn,
+            deviceModel = android.os.Build.MODEL,
+            appVersion = runCatching { getApplication<android.app.Application>().let { it.packageManager.getPackageInfo(it.packageName, 0) }.versionName }.getOrNull(),
+            nowMillis = System.currentTimeMillis(),
+        )
+
+    // Doctor Visit report: built on demand for the selected period, never cached across launches.
+    private val _doctorReport = MutableStateFlow<DoctorVisitReport?>(null)
+    val doctorReport = _doctorReport.asStateFlow()
+    private val _doctorLoading = MutableStateFlow(false)
+    val doctorLoading = _doctorLoading.asStateFlow()
+    private val _doctorCoverage = MutableStateFlow<String?>(null)
+    val doctorCoverage = _doctorCoverage.asStateFlow()
+    /** The readings behind the report, so the on-screen AGP and the printed one agree. */
+    private val _doctorEntries = MutableStateFlow<List<NightscoutGlucoseEntry>>(emptyList())
+    val doctorEntries = _doctorEntries.asStateFlow()
+    private var doctorPeriod = DoctorVisitPeriod.DAYS_7
+
+    // Appointment questions persist like the iOS UserDefaults blob: plain text, one key.
+    private val doctorPrefs by lazy { getApplication<android.app.Application>().getSharedPreferences("doctor_visit", android.content.Context.MODE_PRIVATE) }
+    private val _doctorQuestions = MutableStateFlow("")
+    val doctorQuestions = _doctorQuestions.asStateFlow()
+
+    private val _pdfExporting = MutableStateFlow(false)
+    val pdfExporting = _pdfExporting.asStateFlow()
+    private val _pdfReady = MutableStateFlow<File?>(null)
+    val pdfReady = _pdfReady.asStateFlow()
+    private val _pdfError = MutableStateFlow<String?>(null)
+    val pdfError = _pdfError.asStateFlow()
+
+    // Initial download: written by onboarding or a connection change, cleared once the screen
+    // finishes. A force-quit mid-download leaves it set so the screen runs again rather than
+    // exposing a partially refreshed dashboard. Read synchronously so the dashboard never
+    // mounts first and starts a sync of its own underneath the screen.
+    private val downloadPrefs = application.getSharedPreferences("initial_download", android.content.Context.MODE_PRIVATE)
+    private val _initialDownloadReason = MutableStateFlow(
+        if (downloadPrefs.getBoolean(DOWNLOAD_PENDING_KEY, false)) {
+            runCatching { InitialDataDownload.Reason.valueOf(downloadPrefs.getString(DOWNLOAD_REASON_KEY, null) ?: "") }
+                .getOrDefault(InitialDataDownload.Reason.INITIAL_SETUP)
+        } else null,
+    )
+    val initialDownloadReason = _initialDownloadReason.asStateFlow()
+
+    fun scheduleInitialDownload(reason: InitialDataDownload.Reason) {
+        _initialDownloadReason.value = reason
+        downloadPrefs.edit().putBoolean(DOWNLOAD_PENDING_KEY, true).putString(DOWNLOAD_REASON_KEY, reason.name).apply()
+    }
+
+    fun finishInitialDownload() {
+        _initialDownloadReason.value = null
+        downloadPrefs.edit().clear().apply()
+    }
+
+    /** One download for the screen to run; it uses the same sync as everything else. */
+    fun newInitialDownload(settings: GlucoseSettings): InitialDataDownload =
+        InitialDataDownload(settings, _initialDownloadReason.value ?: InitialDataDownload.Reason.INITIAL_SETUP) {
+            _syncing.first { !it }
+            performSync(settings)
+            _lastOutcome.value ?: SyncOutcome.NotConfigured
+        }
 
     /** True while the once-daily AI wording is being fetched for an already painted report. */
     private val _aiReviewLoading = MutableStateFlow(false)
@@ -174,6 +251,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _reportSnapshot.value = analysisCache.snapshot
         }
 
+        // Onboarding just finished — the first Ready after NeedsOnboarding in this process.
+        viewModelScope.launch {
+            var sawOnboarding = false
+            state.collect { current ->
+                if (current is AppState.NeedsOnboarding) sawOnboarding = true
+                if (current is AppState.Ready && sawOnboarding) {
+                    sawOnboarding = false
+                    // A brand new user with a live source watches the full download land.
+                    if (current.settings.connection != GlucoseConnectionOption.MANUAL) scheduleInitialDownload(InitialDataDownload.Reason.INITIAL_SETUP)
+                    registrationPayload(current.profile, current.settings, current.profile.marketingOptIn)?.let { registration.submit(it) }
+                }
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _doctorQuestions.value = doctorPrefs.getString(DOCTOR_QUESTIONS_KEY, "") ?: ""
+        }
+
         viewModelScope.launch {
             logs.load()
             // Retention is enforced on launch rather than on write: a device left closed
@@ -207,15 +302,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun save(profile: UserProfile, settings: GlucoseSettings) {
         viewModelScope.launch {
+            val previous = repository.profile.first()
             repository.saveProfile(profile)
             repository.saveSettings(settings)
+            if (previous != null && previous.marketingOptIn != profile.marketingOptIn) {
+                registration.syncMarketingPreference(profile.marketingOptIn) { registrationPayload(profile, settings, true) }
+            }
         }
     }
 
     fun saveSettings(settings: GlucoseSettings) {
         viewModelScope.launch {
+            val previous = repository.settings.first()
             repository.saveSettings(settings)
             SyncScheduler.applyFor(getApplication(), settings.connection)
+            // Leaving the form after a connection change schedules the download screen, so the
+            // dashboard reopens on data from the new source rather than the old one's.
+            val changed = previous != null && (
+                previous.connection != settings.connection || previous.nightscoutUrl != settings.nightscoutUrl ||
+                    previous.dexcomUsername != settings.dexcomUsername || previous.libreUsername != settings.libreUsername
+                )
+            if (changed && settings.connection != GlucoseConnectionOption.MANUAL) scheduleInitialDownload(InitialDataDownload.Reason.CONNECTION_CHANGE)
         }
     }
 
@@ -328,11 +435,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     _aiReviewLoading.value = true
                     val enriched = withContext(Dispatchers.IO) {
                         runCatching {
+                            android.util.Log.i("BoostInsights", "starting daily AI review (entries=${entries.size}, hasSettings=${snapshot.review.hasTherapySettings})")
                             reportLoader.enrich(
                                 snapshot, entries, treatments, document, settings.lowGlucose, settings.highGlucose,
                                 profile.therapy, nowMillis, foodLogEntries = food,
                             )
-                        }.getOrDefault(snapshot)
+                        }.onFailure { android.util.Log.w("BoostInsights", "daily AI review failed: ${it.javaClass.simpleName}: ${it.message}") }.getOrDefault(snapshot)
                     }
                     _reportSnapshot.value = enriched
                 }
@@ -350,6 +458,101 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun clearSyncOutcome() {
         _lastOutcome.value = null
     }
+
+    fun saveDoctorQuestions(text: String) {
+        _doctorQuestions.value = text
+        viewModelScope.launch(Dispatchers.IO) { doctorPrefs.edit().putString(DOCTOR_QUESTIONS_KEY, text).apply() }
+    }
+
+    fun reloadDoctorReport(settings: GlucoseSettings, profile: UserProfile) = loadDoctorReport(doctorPeriod, settings, profile)
+
+    /**
+     * Builds the Doctor Visit report for [period]. Mirrors the iOS loadReport: a sync first when a
+     * source is connected, then the shared pattern pass so the PDF and the app show identical
+     * findings, then the report itself. Doses follow the global switch and are never computed
+     * while it hides them.
+     */
+    fun loadDoctorReport(period: DoctorVisitPeriod, settings: GlucoseSettings, profile: UserProfile) {
+        doctorPeriod = period
+        viewModelScope.launch {
+            _doctorLoading.value = true
+            try {
+                if (settings.connection != GlucoseConnectionOption.MANUAL && !_syncing.value) {
+                    performSync(settings)
+                }
+                val readings = logs.readingRows.first()
+                val treatments = logs.treatments.value
+                val therapy = repository.therapy.first()
+                val nowMillis = System.currentTimeMillis()
+                val entries = withContext(Dispatchers.Default) {
+                    GlucoseSourceStitch.stitched(
+                        readings,
+                        source = { it.source },
+                        epoch = { it.epochMilliseconds },
+                        preferredActive = settings.primarySourceTag,
+                    ).map { it.toEntry() }
+                }
+                val document = therapy.toDocument()
+                val food = withContext(Dispatchers.IO) { foodLog.snapshots(withinDays = period.days, nowMillis = nowMillis) }
+                val patternResult = patternService.patterns(
+                    entries = entries,
+                    treatments = treatments,
+                    lowGlucose = settings.lowGlucose,
+                    highGlucose = settings.highGlucose,
+                    periodDays = period.days,
+                    limit = 5,
+                    mealContext = MealOutcomeBuilder.promptContext(entries, treatments, food, settings.lowGlucose, settings.highGlucose),
+                    hasTherapyProfile = DoctorVisitTherapySnapshot.from(document).hasAnyContent,
+                    nowMillis = nowMillis,
+                )
+                val built = withContext(Dispatchers.Default) {
+                    DoctorVisitReportBuilder.build(
+                        entries = entries,
+                        treatments = treatments,
+                        period = period,
+                        lowMgdL = settings.lowGlucose,
+                        highMgdL = settings.highGlucose,
+                        therapyProfile = document,
+                        nowMillis = nowMillis,
+                        patterns = patternResult.patterns,
+                        therapyType = profile.therapy,
+                    )
+                }
+                _doctorEntries.value = entries
+                _doctorReport.value = built
+                _doctorCoverage.value = patternResult.coverageLabel
+            } finally {
+                _doctorLoading.value = false
+            }
+        }
+    }
+
+    fun exportDoctorVisitPdf(settings: GlucoseSettings, profile: UserProfile) {
+        val report = _doctorReport.value ?: return
+        if (_pdfExporting.value) return
+        _pdfExporting.value = true
+        _pdfError.value = null
+        val appointment = DoctorVisitPdf.Appointment(
+            questions = _doctorQuestions.value,
+            patientName = profile.name.takeIf { it.isNotBlank() },
+            lowThresholdMgdL = settings.lowGlucose,
+            highThresholdMgdL = settings.highGlucose,
+        )
+        // Same readings the on-screen AGP chart uses, so the printed chart matches.
+        val since = report.periodStartMillis
+        val agpEntries = _doctorEntries.value.filter { it.epochMilliseconds >= since }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { DoctorVisitPdf(getApplication()).export(report, appointment, agpEntries) }
+            }
+            result.onSuccess { _pdfReady.value = it }
+                .onFailure { _pdfError.value = it.message ?: "The report could not be generated. Please try again." }
+            _pdfExporting.value = false
+        }
+    }
+
+    fun consumePdf() { _pdfReady.value = null }
+    fun dismissPdfError() { _pdfError.value = null }
 
     fun saveTherapy(therapy: TherapyProfile) {
         viewModelScope.launch {
@@ -397,6 +600,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun deleteEverything() {
         viewModelScope.launch {
+            // Before the registration id goes with everything else.
+            registration.markProfileDeleted()
             SyncScheduler.cancel(getApplication())
             logs.deleteEverything()
             credentials.clear()
@@ -417,5 +622,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteTreatment(cacheKey: String) {
         viewModelScope.launch { logs.deleteTreatment(cacheKey) }
+    }
+
+    private companion object {
+        const val DOCTOR_QUESTIONS_KEY = "questions"
+        const val DOWNLOAD_PENDING_KEY = "pending"
+        const val DOWNLOAD_REASON_KEY = "reason"
     }
 }

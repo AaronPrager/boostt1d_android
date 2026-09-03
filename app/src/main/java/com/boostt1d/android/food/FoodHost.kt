@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.boostt1d.android.bolus.BolusPrefill
 import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.FoodAnalysis
 import com.boostt1d.android.data.FoodLogRepository
@@ -42,7 +43,7 @@ fun FoodHost(
     unit: BGUnit,
     nowMillis: Long,
     onImportTreatments: () -> Unit,
-    onOpenBolusCalculator: () -> Unit,
+    onOpenBolusCalculator: (BolusPrefill) -> Unit,
     onOpenTherapyProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {

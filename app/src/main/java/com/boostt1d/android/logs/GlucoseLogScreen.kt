@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.boostt1d.android.charts.AgpChart
 import com.boostt1d.android.charts.GlucoseChart
 import com.boostt1d.android.charts.glucoseColor
 import com.boostt1d.android.data.BGUnit
@@ -127,14 +128,27 @@ fun GlucoseLogScreen(
         if (tab == GlucoseLogTab.CHART) {
             item {
                 BoostCard {
-                    GlucoseChart(
-                        entries = visible.map { it.toEntry() },
-                        lowMgdl = lowMgdl,
-                        highMgdl = highMgdl,
-                        unit = unit,
-                        windowStartMillis = since,
-                        windowEndMillis = nowMillis,
-                    )
+                    // A day or less reads as a timeline; anything longer collapses onto the
+                    // 24-hour clock as a typical-day profile, as the iOS chart does.
+                    if (window.millis > 86_400_000L) {
+                        AgpChart(
+                            entries = visible.map { it.toEntry() },
+                            dayCount = (window.millis / 86_400_000L).toInt(),
+                            lowMgdl = lowMgdl,
+                            highMgdl = highMgdl,
+                            unit = unit,
+                            nowMillis = nowMillis,
+                        )
+                    } else {
+                        GlucoseChart(
+                            entries = visible.map { it.toEntry() },
+                            lowMgdl = lowMgdl,
+                            highMgdl = highMgdl,
+                            unit = unit,
+                            windowStartMillis = since,
+                            windowEndMillis = nowMillis,
+                        )
+                    }
                 }
             }
             return@ScreenScaffold

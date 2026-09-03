@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.ListAlt
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Restaurant
@@ -64,6 +65,7 @@ enum class HomeDestination {
     FOOD_LOG,
     SNAP_MEAL,
     INSIGHTS,
+    DOCTOR_VISIT,
     BLOOD_GLUCOSE,
     EVENT_LOG,
     BOLUS_CALCULATOR,
@@ -79,8 +81,8 @@ enum class HomeDestination {
  * iOS carries five tabs — Dashboard, Food, Insights, Logs, Menu. Food opens a submenu with
  * Snap a Meal and the Food Log, as on iOS.
  *
- * Insights opens the What Happened report directly. On iOS it is a submenu holding the report
- * and the Doctor Visit report; the submenu returns with the second item.
+ * Insights, Logs and Menu open submenus too; Insights holds the What Happened? report and the
+ * Doctor Visit report, as on iOS.
  */
 private enum class HomeTab(val label: String, val icon: ImageVector) {
     DASHBOARD("Dashboard", Icons.Filled.Dashboard),
@@ -110,6 +112,10 @@ fun HomeShell(
         SubmenuItem("Snap a Meal", "Photo to carb estimate", Icons.Filled.CameraAlt, HomeDestination.SNAP_MEAL),
         SubmenuItem("Food Log", "Meals, carbs and photos", Icons.Filled.Restaurant, HomeDestination.FOOD_LOG),
     )
+    val insightsItems = listOf(
+        SubmenuItem("What Happened?", "Your last seven days, in plain language", Icons.Filled.Insights, HomeDestination.INSIGHTS),
+        SubmenuItem("Doctor Visit", "A report to bring to your appointment", Icons.Filled.MedicalServices, HomeDestination.DOCTOR_VISIT),
+    )
     val logsItems = listOf(
         SubmenuItem("BG Log", "Readings and charts", Icons.Filled.ShowChart, HomeDestination.BLOOD_GLUCOSE),
         SubmenuItem("Event Log", "Insulin, carbs and events", Icons.AutoMirrored.Filled.MenuBook, HomeDestination.EVENT_LOG),
@@ -125,7 +131,7 @@ fun HomeShell(
     val activeTab = when (destination) {
         HomeDestination.DASHBOARD -> HomeTab.DASHBOARD
         HomeDestination.FOOD_LOG, HomeDestination.SNAP_MEAL -> HomeTab.FOOD
-        HomeDestination.INSIGHTS -> HomeTab.INSIGHTS
+        HomeDestination.INSIGHTS, HomeDestination.DOCTOR_VISIT -> HomeTab.INSIGHTS
         HomeDestination.BLOOD_GLUCOSE, HomeDestination.EVENT_LOG -> HomeTab.LOGS
         else -> HomeTab.MENU
     }
@@ -157,6 +163,14 @@ fun HomeShell(
             }
 
             AnimatedVisibility(
+                visible = openTab == HomeTab.INSIGHTS,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut(),
+            ) {
+                Submenu(insightsItems, destination) { onSelect(it); openTab = null }
+            }
+
+            AnimatedVisibility(
                 visible = openTab == HomeTab.LOGS,
                 enter = slideInVertically { it } + fadeIn(),
                 exit = slideOutVertically { it } + fadeOut(),
@@ -180,10 +194,6 @@ fun HomeShell(
                         HomeTab.DASHBOARD -> {
                             openTab = null
                             onSelect(HomeDestination.DASHBOARD)
-                        }
-                        HomeTab.INSIGHTS -> {
-                            openTab = null
-                            onSelect(HomeDestination.INSIGHTS)
                         }
                         // Tapping the open tab again closes it, so the bar is never a trap.
                         else -> openTab = if (openTab == tab) null else tab

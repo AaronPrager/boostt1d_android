@@ -29,6 +29,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,6 +56,9 @@ fun ScreenScaffold(
     content: LazyListScope.() -> Unit,
 ) {
     val colors = BoostTheme.colors
+    // Landscape has little height to spare: the title and subtitle share one line at a
+    // smaller size and the header takes a quarter of what it does upright.
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     Box(
         modifier = modifier.fillMaxSize().background(colors.background),
@@ -69,14 +75,21 @@ fun ScreenScaffold(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = BoostSpacing.lg, vertical = BoostSpacing.md),
+                .padding(horizontal = BoostSpacing.lg, vertical = if (landscape) BoostSpacing.xs else BoostSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                title?.let {
-                    Text(it, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+            if (landscape) {
+                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(BoostSpacing.sm)) {
+                    title?.let { Text(it, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1) }
+                    subtitle?.let { Text(it, fontSize = 13.sp, color = colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)) }
                 }
-                subtitle?.let { Text(it, fontSize = 14.sp, color = colors.textSecondary) }
+            } else {
+                Column(modifier = Modifier.weight(1f)) {
+                    title?.let {
+                        Text(it, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                    }
+                    subtitle?.let { Text(it, fontSize = 14.sp, color = colors.textSecondary) }
+                }
             }
 
             if (onAdd != null) {

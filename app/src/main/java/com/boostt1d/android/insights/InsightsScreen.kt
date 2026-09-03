@@ -67,8 +67,11 @@ fun InsightsScreen(
     var proposalId by rememberSaveable { mutableStateOf<String?>(null) }
     var outcomeId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // Load once on first open; the toolbar refresh is always available for a deliberate reload.
-    LaunchedEffect(Unit) { if (snapshot == null) onRefresh() }
+    // Paint first, then refresh: the view model repaints the last result on launch, and a
+    // cached open must still recompute underneath it — a snapshot from this morning is
+    // right until midnight, but the sync, the change detector and the daily AI pass all
+    // run inside the refresh. Once per entry into the tab; the toolbar button reloads.
+    LaunchedEffect(Unit) { onRefresh() }
 
     BackHandler(enabled = route != "report") {
         route = when (route) {

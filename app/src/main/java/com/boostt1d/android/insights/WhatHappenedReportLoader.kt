@@ -38,6 +38,8 @@ class WhatHappenedReportLoader(
     /** The once-daily AI trip. Null means AI is off in this build. */
     private val dailyReviewer: DailyTherapyReviewService.Reviewer? = null,
     private val timeZone: TimeZone = TimeZone.getDefault(),
+    /** Diagnostics hook: the source and status note of each AI pass. Never the content. */
+    private val onEnriched: (source: String, statusNote: String?) -> Unit = { _, _ -> },
 ) {
     /** The formula-only result, painted first. [enrich] adds today's AI wording afterwards. */
     suspend fun build(
@@ -180,6 +182,7 @@ class WhatHappenedReportLoader(
         )
         val updated = snapshot.copy(dailyTherapyReview = enriched)
         analysisCache.store(updated)
+        onEnriched(enriched.source.name, enriched.statusNote ?: DailyTherapyReviewService.lastDiagnostic)
         return updated
     }
 }

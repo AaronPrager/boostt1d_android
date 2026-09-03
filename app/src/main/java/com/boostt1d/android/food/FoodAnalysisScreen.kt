@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.boostt1d.android.bolus.BolusPrefill
 import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.Config
 import com.boostt1d.android.data.FoodAnalysis
@@ -83,7 +84,7 @@ fun FoodAnalysisScreen(
     unit: BGUnit,
     nowMillis: Long,
     onSaveToFoodLog: (FoodAnalysis, Bitmap?) -> Unit,
-    onOpenBolusCalculator: () -> Unit,
+    onOpenBolusCalculator: (BolusPrefill) -> Unit,
     onOpenTherapyProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -224,7 +225,7 @@ fun FoodAnalysisScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = { onSaveToFoodLog(analysis, selectedImage) }, shape = RoundedCornerShape(BoostRadius.md), colors = ButtonDefaults.buttonColors(containerColor = colors.inRange), modifier = Modifier.weight(1f)) { Text("Save to Food Log", fontWeight = FontWeight.SemiBold, maxLines = 1) }
                     if (!current.needsProfile) {
-                        Button(onClick = onOpenBolusCalculator, shape = RoundedCornerShape(BoostRadius.md), colors = ButtonDefaults.buttonColors(containerColor = colors.primary), modifier = Modifier.weight(1f)) { Text("Bolus Calculator", fontWeight = FontWeight.SemiBold, maxLines = 1) }
+                        Button(onClick = { onOpenBolusCalculator(BolusPrefill(analysis.carbsGrams ?: 0.0, current.currentGlucoseMgdl, current.iob, current.cob)) }, shape = RoundedCornerShape(BoostRadius.md), colors = ButtonDefaults.buttonColors(containerColor = colors.primary), modifier = Modifier.weight(1f)) { Text("Bolus Calculator", fontWeight = FontWeight.SemiBold, maxLines = 1) }
                     }
                 }
             }

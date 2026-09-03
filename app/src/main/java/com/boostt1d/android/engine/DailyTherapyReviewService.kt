@@ -55,7 +55,14 @@ object DailyTherapyReviewService {
      * weigh it differently. Outside dev builds they see either nothing, or the one thing they
      * can actually act on — never where it came from.
      */
-    private fun note(dev: String, user: String? = null, isDevMode: Boolean): String? = if (isDevMode) dev else user
+    private fun note(dev: String, user: String? = null, isDevMode: Boolean): String? {
+        lastDiagnostic = dev
+        return if (isDevMode) dev else user
+    }
+
+    /** The dev note of the most recent decision, for logs only. Never shown to the reader in production. */
+    @Volatile var lastDiagnostic: String? = null
+        private set
 
     fun formulaReview(
         review: TherapySettingsReview,
