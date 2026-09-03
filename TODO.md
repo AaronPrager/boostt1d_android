@@ -3,7 +3,7 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
-151 unit tests and 5 instrumented tests, all green.
+162 unit tests and 5 instrumented tests, all green.
 
 ## Data layer
 
@@ -46,7 +46,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ## Quality
 
-- [x] 151 unit tests, all green
+- [x] 162 unit tests, all green
 - [x] Instrumented tests — 5, against a real SQLite database
 - [ ] Instrumented *UI* tests — the screens are still only checked by hand
 - [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
@@ -134,3 +134,42 @@ have never met a live account.
 
 - [x] `StoredShapeTest` — older stored JSON keeps decoding when a shape gains a field, so
       a returning user is never sent through setup as though they were new
+
+---
+
+# Phase 3 — The engine
+
+The therapy engine, ported test-first in dependency order. A module is checked only when its
+iOS test file is ported and green; the order is the leaf-to-root order of the engine's own
+dependency graph, so nothing is built on a module that is not yet proven.
+
+## 3a — engine (no UI)
+
+- [x] `MealOutcomeBuilder` ← MealOutcomeBuilderTests — leaf; meals joined to their glucose curves
+- [ ] `TherapyChangeDetector` ← TherapyChangeDetectorTests — leaf; notices a setting changed
+- [ ] `WhatHappenedPatternDetector` + `PatternService` ← PatternClaimIntegrityTests,
+      MealWindowPatternTests, WhatHappenedDurationLabelTests — a mutually dependent pair
+- [ ] `TherapyChangeOutcomeBuilder` ← TherapyChangeOutcomeBuilderTests — "did it work?"
+- [ ] `GlucoseWeeklyReportBuilder` ← GlucoseWeeklyReportComparisonTests — leaf
+- [ ] `WhatHappenedDailyOverviewBuilder` — leaf, no dedicated test file; pin behaviour when porting
+- [ ] `FormulaInsightBuilder` — leaf, no dedicated test file; pin behaviour when porting
+- [ ] `InsulinDeliveryContext` — leaf; `InsulinTherapyType` already exists, the rest does not
+- [ ] `NightscoutOnBoard` ← NightscoutOnBoardTests — a simplified `OnBoard` exists; check parity
+- [ ] `DailyTherapyReviewService` + `DailyTherapyReviewCache` ← both test files
+- [ ] `WhatHappenedAnalysisCache` ← WhatHappenedAnalysisCachePersistenceTests
+- [ ] `TherapyAnalysisCache` — depends on PatternService
+- [ ] `DoseSuggestionService` — **no test file on iOS**, and gated by `HIDE_DOSE_RECOMMENDATIONS`;
+      port with the gate intact and write the tests iOS never had
+- [ ] `TherapySettingsReviewBuilder` ← TherapySettingsReviewBuilderTests (816 lines) — the
+      crown jewel; last, because it depends on everything above
+- [ ] `DiabetesProfileService` — depends on TherapyChangeDetector
+- [ ] `AIGlucoseAnalysisService` — deferred to phase 4 with the rest of the AI path
+- N/A `DefaultsHygieneTests` — iOS UserDefaults hygiene; DataStore has no equivalent problem
+
+## 3b — screens on top
+
+- [ ] `WhatHappenedReportView` (2,032) — the week in review, four tabs
+- [ ] `TherapyAdjustmentView` (1,919) — the therapy review
+- [ ] Review sections, outcome section, `PatternInsightCard`
+- [ ] `MultiDayOverlayChartView`
+- [ ] Insights tab restored to the shell once there is something behind it
