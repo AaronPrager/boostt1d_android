@@ -89,8 +89,9 @@ have never met a live account.
 - [x] Source stitching at read time, so switching source never hides stored history
 - [x] Token in EncryptedSharedPreferences, never in the settings blob, masked on screen
 - [x] **Verified against a real site** — 23 readings, 11 events and insulin doses came down
-- [ ] Handle a site whose history is longer than the retention window without pulling
-      all of it on first sync
+- [x] A site with years of history is never asked for more than the retention window —
+      `hoursToFetch` caps a first sync at 14 days and a routine one at the gap since the
+      newest stored reading, plus an hour of overlap
 
 ## Dexcom Share
 
