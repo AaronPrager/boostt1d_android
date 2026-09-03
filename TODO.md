@@ -3,7 +3,7 @@
 Tracks the phase 1 scope from the parity plan: making the app usable by someone with no
 CGM. Checked items are built, building, and verified on an API 35 emulator.
 
-263 unit tests and 5 instrumented tests, all green.
+272 unit tests and 5 instrumented tests, all green.
 
 ## Data layer
 
@@ -46,7 +46,7 @@ CGM. Checked items are built, building, and verified on an API 35 emulator.
 
 ## Quality
 
-- [x] 263 unit tests, all green
+- [x] 272 unit tests, all green
 - [x] Instrumented tests — 5, against a real SQLite database
 - [ ] Instrumented *UI* tests — the screens are still only checked by hand
 - [x] Verified at CGM scale — 4,032 readings through stitching, Room and retention.
@@ -164,15 +164,21 @@ dependency graph, so nothing is built on a module that is not yet proven.
       passes the therapy type from the profile where iOS reads UserDefaults
 - [x] `NightscoutOnBoard` ← NightscoutOnBoardTests. The phase-2 walker read three shapes and
       needed IOB and COB on the same row; `parseOnBoard` now delegates to the ported walker
-- [ ] `DailyTherapyReviewService` + `DailyTherapyReviewCache` ← both test files
-- [ ] `WhatHappenedAnalysisCache` ← WhatHappenedAnalysisCachePersistenceTests
-- [ ] `TherapyAnalysisCache` — depends on PatternService
+- [x] `DailyTherapyReviewService` + `DailyTherapyReviewCache` ← both test files. The network
+      trip is a `Reviewer` interface, null in this build; assembly, the narrative guard and the
+      once-a-day gate are complete and tested
+- [x] `WhatHappenedAnalysisCache` ← WhatHappenedAnalysisCachePersistenceTests — behind
+      `AnalysisCacheStore`; the app supplies the cache-directory file
+- [ ] `TherapyAnalysisCache` — deferred to phase 4: it caches `AITherapySuggestions`, the AI
+      dose-analysis response, which does not exist until the AI path does
 - [ ] `DoseSuggestionService` — **no test file on iOS**, and gated by `HIDE_DOSE_RECOMMENDATIONS`;
       port with the gate intact and write the tests iOS never had
 - [x] `TherapySettingsReviewBuilder` ← TherapySettingsReviewBuilderTests (816 lines) — the
       crown jewel. Ported before the daily review rather than after it, because the daily
       review is built *from* its findings; all 26 cases green on first compile
-- [ ] `DiabetesProfileService` — depends on TherapyChangeDetector
+- [ ] `DiabetesProfileService` — app-side orchestration, not engine: on Android it is
+      `ProfileRepository` + `fetchProfileDocuments`. What remains is wiring — record a detector
+      snapshot on every local profile save, feed fetched history in on sync (see 3b)
 - [ ] `AIGlucoseAnalysisService` — deferred to phase 4 with the rest of the AI path
 - N/A `DefaultsHygieneTests` — iOS UserDefaults hygiene; DataStore has no equivalent problem
 

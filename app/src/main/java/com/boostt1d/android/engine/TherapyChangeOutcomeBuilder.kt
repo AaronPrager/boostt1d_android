@@ -3,6 +3,7 @@ package com.boostt1d.android.engine
 import com.boostt1d.android.data.NightscoutGlucoseEntry
 import com.boostt1d.android.data.NightscoutTreatment
 import com.boostt1d.android.data.TodaySoFarBuilder
+import kotlinx.serialization.Serializable
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
@@ -13,6 +14,7 @@ import kotlin.math.roundToInt
 // MARK: - Vocabulary
 
 /** What the data says about a therapy change, once there has been time to say anything. */
+@Serializable
 enum class TherapyChangeVerdict(val displayName: String, /** Verdicts that carry a result sort above the ones still waiting. */ val rank: Int) {
     IMPROVED("Looks better", 1),
     WORSE("Looks worse", 0),
@@ -24,6 +26,7 @@ enum class TherapyChangeVerdict(val displayName: String, /** Verdicts that carry
 }
 
 /** The glucose picture inside one hour window, over one stretch of days. */
+@Serializable
 data class TherapyWindowStats(
     val averageGlucose: Double?,
     /** Percent of readings in range. */
@@ -39,6 +42,7 @@ data class TherapyWindowStats(
 }
 
 /** One therapy change, and what happened after it. */
+@Serializable
 data class TherapyChangeOutcome(
     val change: TherapyChange,
     val verdict: TherapyChangeVerdict,
