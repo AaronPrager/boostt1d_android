@@ -126,7 +126,6 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         unit = current.profile.bgUnit,
                         showsAdvancedDetail = advancedDetail,
                         nowMillis = nowMillis,
-                        onToggleAdvancedDetail = viewModel::setAdvancedTherapyDetail,
                         onRefresh = { viewModel.refreshReport(current.settings, current.profile) },
                         modifier = modifier,
                     )
@@ -176,6 +175,8 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                             viewModel.deleteEverything()
                             destination = HomeDestination.DASHBOARD
                         },
+                        advancedTherapyDetail = advancedDetail,
+                        onToggleAdvancedTherapyDetail = viewModel::setAdvancedTherapyDetail,
                         modifier = modifier,
                     )
 

@@ -196,10 +196,9 @@ dependency graph, so nothing is built on a module that is not yet proven.
       and tested end to end; the sync feeds every fetched profile document to the change
       detector; a hand-entered profile records a snapshot on save; the analysis cache lives in
       the cache directory and repaints the last result on launch
-- [ ] "Advanced details" toggle belongs in Profile → Reports as on iOS; it is on the Therapy
-      page for now
+- [x] "Advanced details" toggle in Profile → Reports, as on iOS
 - [ ] Verify the report on the emulator against the test instance
 - [ ] `MultiDayOverlayChartView` — the AGP profile. Used by the BG Log chart and the Doctor Visit
       report on iOS, so it goes with those rather than with this screen
-- [ ] Ask for the insulin therapy type (loop, pump, injections) in Profile, as iOS does; the
-      field exists and the review reads it, but nothing sets it yet
+- [x] Insulin therapy type (loop, pump, injections) — already asked in Profile; the review and
+      the daily review read it

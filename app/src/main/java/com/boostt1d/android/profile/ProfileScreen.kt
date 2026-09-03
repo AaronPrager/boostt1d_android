@@ -31,6 +31,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -90,6 +92,9 @@ fun ProfileScreen(
     onSave: (UserProfile, GlucoseSettings) -> Unit,
     onBack: () -> Unit,
     onDeleteEverything: () -> Unit,
+    /** The What Happened report's detail level — this is the control for that page, as on iOS. */
+    advancedTherapyDetail: Boolean = false,
+    onToggleAdvancedTherapyDetail: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = BoostTheme.colors
@@ -322,6 +327,35 @@ fun ProfileScreen(
 
             // The Privacy Policy states the app offers data deletion, so it has to be
             // here and not only through Android's app-info screen.
+            // Reports: the What Happened page speaks plain English until someone asks for the
+            // clinical vocabulary. Persisted, because a user who wants the numbers wants them
+            // every time.
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(BoostSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
+            ) {
+                Text("Reports", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(BoostSpacing.sm),
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Advanced details", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                        Text(
+                            "Show clinical setting names, how many days each finding is based on, and the full working behind it.",
+                            fontSize = 12.sp, color = colors.textSecondary,
+                        )
+                    }
+                    Switch(
+                        checked = advancedTherapyDetail,
+                        onCheckedChange = onToggleAdvancedTherapyDetail,
+                        colors = SwitchDefaults.colors(checkedTrackColor = colors.primary),
+                    )
+                }
+            }
+
+            BoostDivider()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

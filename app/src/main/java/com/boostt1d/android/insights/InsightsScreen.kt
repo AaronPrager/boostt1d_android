@@ -58,7 +58,6 @@ fun InsightsScreen(
     unit: BGUnit,
     showsAdvancedDetail: Boolean,
     nowMillis: Long,
-    onToggleAdvancedDetail: (Boolean) -> Unit,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -105,7 +104,7 @@ fun InsightsScreen(
 
     WhatHappenedReportScreen(
         snapshot = snapshot, loading = loading, unit = unit, showsAdvancedDetail = showsAdvancedDetail, nowMillis = nowMillis,
-        onToggleAdvancedDetail = onToggleAdvancedDetail, onRefresh = onRefresh,
+        onRefresh = onRefresh,
         onOpenProposal = { proposalId = it; route = "proposal" },
         onOpenOutcomes = { route = "outcomes" },
         modifier = modifier,
@@ -119,7 +118,6 @@ private fun WhatHappenedReportScreen(
     unit: BGUnit,
     showsAdvancedDetail: Boolean,
     nowMillis: Long,
-    onToggleAdvancedDetail: (Boolean) -> Unit,
     onRefresh: () -> Unit,
     onOpenProposal: (String) -> Unit,
     onOpenOutcomes: () -> Unit,
@@ -149,7 +147,7 @@ private fun WhatHappenedReportScreen(
             else -> when (page) {
                 ReportPage.SUMMARY -> summaryPage(snapshot!!, unit)
                 ReportPage.PATTERNS -> patternsPage(snapshot!!, unit)
-                ReportPage.THERAPY -> therapyPage(snapshot!!, unit, showsAdvancedDetail, nowMillis, onToggleAdvancedDetail, onOpenProposal, onOpenOutcomes)
+                ReportPage.THERAPY -> therapyPage(snapshot!!, unit, showsAdvancedDetail, nowMillis, onOpenProposal, onOpenOutcomes)
                 ReportPage.DAYS -> daysPage(snapshot!!.dailyDays, unit)
             }
         }

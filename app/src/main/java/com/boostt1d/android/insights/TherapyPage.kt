@@ -23,8 +23,6 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -55,36 +53,13 @@ internal fun LazyListScope.therapyPage(
     unit: BGUnit,
     showsAdvancedDetail: Boolean,
     nowMillis: Long,
-    onToggleAdvancedDetail: (Boolean) -> Unit,
     onOpenProposal: (String) -> Unit,
     onOpenOutcomes: () -> Unit,
 ) {
     item { DailyTherapyReviewSection(snapshot.dailyTherapyReview, showsAdvancedDetail, onOpenProposal) }
     item { TherapyChangeOutcomeSection(snapshot.outcomes, snapshot.watchingSinceMillis, showsAdvancedDetail, nowMillis, onOpenOutcomes) }
-    item { AdvancedDetailRow(showsAdvancedDetail, onToggleAdvancedDetail) }
     if (showsAdvancedDetail && snapshot.review.hasReviewContent) {
         item { DetailedTherapyReview(snapshot.review, unit) }
-    }
-}
-
-/**
- * Off by default: the Therapy page speaks plain English until someone asks for the clinical
- * vocabulary. iOS keeps this in the report's own storage; here it is a row on the page, since
- * Android has no equivalent of the toolbar menu it lives behind.
- */
-@Composable
-private fun AdvancedDetailRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
-    val colors = BoostTheme.colors
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = BoostSpacing.xxs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(BoostSpacing.sm),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Clinical detail", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
-            Text("Setting names, sample sizes and the formula’s working.", fontSize = 12.sp, color = colors.textSecondary)
-        }
-        Switch(checked = enabled, onCheckedChange = onToggle, colors = SwitchDefaults.colors(checkedTrackColor = colors.primary))
     }
 }
 
