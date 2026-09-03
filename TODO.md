@@ -197,7 +197,10 @@ dependency graph, so nothing is built on a module that is not yet proven.
       detector; a hand-entered profile records a snapshot on save; the analysis cache lives in
       the cache directory and repaints the last result on launch
 - [x] "Advanced details" toggle in Profile → Reports, as on iOS
-- [ ] Verify the report on the emulator against the test instance
+- [x] Verified on the emulator against the test instance: Summary matches the server exactly
+      (TIR 60% · low 3% · high 26% · very high 11% · GMI 7.3%, recomputed from the same window
+      over the API); Patterns, Therapy and Days render; outcome detail → list → report on Back;
+      the Profile toggle reaches the Therapy page
 - [ ] `MultiDayOverlayChartView` — the AGP profile. Used by the BG Log chart and the Doctor Visit
       report on iOS, so it goes with those rather than with this screen
 - [x] Insulin therapy type (loop, pump, injections) — already asked in Profile; the review and
