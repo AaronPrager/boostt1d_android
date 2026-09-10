@@ -220,8 +220,12 @@ private fun StillOnBoard(onBoard: OnBoard, connection: GlucoseConnectionOption) 
                     GlucoseConnectionOption.MANUAL ->
                         "Your pump or loop reports these. Nothing is connected, so there is " +
                             "nothing to read them from."
-                    else ->
+                    else -> if (onBoard.connectionStale) {
+                        "Your last reading is over 15 minutes old, so these stay hidden until " +
+                            "readings resume."
+                    } else {
                         "Your loop reports these to Nightscout. Nothing has been published yet."
+                    }
                 },
                 fontSize = 11.sp,
                 color = colors.textTertiary,

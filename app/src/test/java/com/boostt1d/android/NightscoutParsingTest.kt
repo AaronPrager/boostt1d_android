@@ -247,9 +247,11 @@ class NightscoutParsingTest {
         val at = 1_756_382_400_000L
         val fresh = OnBoard(2.0, 20.0, at)
 
-        assertEquals(fresh, OnBoard.freshOrNone(fresh, at + 60_000))
+        assertEquals(fresh, OnBoard.unlessConnectionStale(fresh, latestReadingMillis = at, nowMillis = at + 60_000))
         // Twenty minutes on, "2 U on board" no longer describes now.
-        assertTrue(OnBoard.freshOrNone(fresh, at + 20 * 60_000).isEmpty)
+        assertTrue(OnBoard.unlessConnectionStale(fresh, at, at + 20 * 60_000).isEmpty)
+        assertTrue(OnBoard.unlessConnectionStale(fresh, at, at + 20 * 60_000).connectionStale)
+        assertTrue(OnBoard.unlessConnectionStale(fresh, null, at).isEmpty)
     }
 
     @Test
@@ -312,5 +314,21 @@ class NightscoutParsingTest {
 
         assertEquals(1, docs.size)
         assertEquals(1.0, docs[0].store.getValue("Work").basal.first().value, 0.0)
+    }
+
+    @Test
+    fun `properties answer first, dated by its own mills, and pebble is the last resort`() {
+        val properties = """{"iob":{"iob":3.64,"basaliob":0,"source":"OpenAPS","mills":1788473100000,"display":"3.64"},"cob":{"cob":0,"isDecaying":0}}"""
+        val onBoard = service.parseOnBoardProperties(properties, nowMillis = 1_000L)
+        assertEquals(3.64, onBoard.insulinUnits!!, 0.0001)
+        assertEquals(0.0, onBoard.carbsGrams!!, 0.0001)
+        assertEquals(1788473100000L, onBoard.asOfMillis)
+        assertTrue(service.parseOnBoardProperties("{}", 1_000L).isEmpty)
+
+        val pebble = """{"status":[{"now":1788474383352}],"bgs":[{"sgv":"101","iob":"3.64","cob":0}]}"""
+        val fromPebble = service.parseOnBoardPebble(pebble, nowMillis = 1_000L)
+        assertEquals(3.64, fromPebble.insulinUnits!!, 0.0001)
+        assertEquals(1788474383352L, fromPebble.asOfMillis)
+        assertTrue(service.parseOnBoardPebble("not json", 1_000L).isEmpty)
     }
 }

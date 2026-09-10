@@ -365,9 +365,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // anything the app derives. A failure here is not a sync failure — the
         // readings still arrived.
         _onBoard.value = runCatching {
-            OnBoard.freshOrNone(
-                nightscout.fetchOnBoard(settings.nightscoutUrl, credentials.nightscoutToken),
-                System.currentTimeMillis(),
+            val now = System.currentTimeMillis()
+            OnBoard.unlessConnectionStale(
+                nightscout.fetchOnBoard(settings.nightscoutUrl, credentials.nightscoutToken, now),
+                logs.latestReading()?.epochMilliseconds,
+                now,
             )
         }.getOrDefault(OnBoard.none)
 

@@ -182,19 +182,38 @@ class NightscoutService(
         }
 
     /**
-     * Insulin and carbs on board, from whatever the loop last published to
-     * `devicestatus`.
+     * Insulin and carbs on board, in the order iOS asks for them: Nightscout's own
+     * `/api/v2/properties` first — it works IOB and COB out server-side, from the loop's
+     * devicestatus when there is one and from treatments and the profile when there is
+     * not, so a site with no loop still answers — then the raw `devicestatus` rows, then
+     * the `/pebble` watch-face payload. The first answer carrying a figure wins.
      *
-     * Several uploaders write this and they disagree about where: Loop nests it under
-     * `loop`, the oref lineage under `openaps.suggested` or `openaps.enacted`. All three
-     * are read, newest first, and the first that carries a figure wins.
+     * Several uploaders write devicestatus and they disagree about where: Loop nests it
+     * under `loop`, the oref lineage under `openaps.suggested` or `openaps.enacted`.
      */
-    suspend fun fetchOnBoard(url: String, token: String): OnBoard = withContext(Dispatchers.IO) {
-        val body = firstWorkingStrategy(
-            url, "/api/v1/devicestatus.json", listOf("count" to "24"),
-            NightscoutUrl.therapyStrategies(token),
-        )
-        parseOnBoard(body)
+    suspend fun fetchOnBoard(url: String, token: String, nowMillis: Long = System.currentTimeMillis()): OnBoard = withContext(Dispatchers.IO) {
+        val strategies = NightscoutUrl.therapyStrategies(token)
+        runCatching { firstWorkingStrategy(url, "/api/v2/properties/iob,cob", emptyList(), strategies) }
+            .getOrNull()?.let { parseOnBoardProperties(it, nowMillis) }?.takeIf { !it.isEmpty }?.let { return@withContext it }
+        runCatching { firstWorkingStrategy(url, "/api/v1/devicestatus.json", listOf("count" to "24"), strategies) }
+            .getOrNull()?.let { parseOnBoard(it) }?.takeIf { !it.isEmpty }?.let { return@withContext it }
+        parseOnBoardPebble(firstWorkingStrategy(url, "/pebble", emptyList(), strategies), nowMillis)
+    }
+
+    /** `/api/v2/properties/iob,cob`: dated by the figure's own `mills` when Nightscout gives one. */
+    internal fun parseOnBoardProperties(body: String, nowMillis: Long): OnBoard {
+        val root = runCatching { json.parseToJsonElement(body.trim()).jsonObject }.getOrNull() ?: return OnBoard.none
+        val reading = NightscoutOnBoard.fromProperties(root, nowIso = "") ?: return OnBoard.none
+        val at = (root["iob"] as? JsonObject)?.get("mills")?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()?.toLong() ?: nowMillis
+        return OnBoard(reading.iob, reading.cob, at)
+    }
+
+    /** `/pebble`: `bgs[0].iob` / `bgs[0].cob`, dated by the payload's `status[0].now`. */
+    internal fun parseOnBoardPebble(body: String, nowMillis: Long): OnBoard {
+        val root = runCatching { json.parseToJsonElement(body.trim()).jsonObject }.getOrNull() ?: return OnBoard.none
+        val reading = NightscoutOnBoard.fromPebble(root, nowIso = "") ?: return OnBoard.none
+        val at = ((root["status"] as? JsonArray)?.firstOrNull() as? JsonObject)?.get("now")?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()?.toLong() ?: nowMillis
+        return OnBoard(reading.iob, reading.cob, at)
     }
 
     internal fun parseOnBoard(body: String): OnBoard {

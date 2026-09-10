@@ -41,27 +41,28 @@ enum class TrendRange(val hours: Int, val label: String) {
  * absorption model; deriving either from a manual log would produce a number that looks
  * computed and isn't, next to a reading someone is about to act on.
  *
- * [asOfMillis] is when the loop published it. Stale figures are dropped rather than shown,
- * because "2.4 U on board" from three hours ago is worse than "--".
+ * [asOfMillis] is when the loop published it, or when Nightscout worked it out. The figures
+ * are hidden only while the glucose connection itself is stale, as on iOS: a loop that
+ * uploads every five minutes is current for as long as the readings beside it are, and a
+ * site with no loop still answers through Nightscout's own IOB/COB calculation.
  */
 data class OnBoard(
     val insulinUnits: Double? = null,
     val carbsGrams: Double? = null,
     val asOfMillis: Long = 0L,
+    /** True when figures were withheld because the last glucose reading is too old. */
+    val connectionStale: Boolean = false,
 ) {
     val isEmpty: Boolean get() = insulinUnits == null && carbsGrams == null
 
     companion object {
-        /** Beyond this the loop's figures no longer describe now. */
-        const val FRESHNESS_WINDOW_MILLIS = 15L * 60 * 1000
+        /** Past this since the last reading, the connection is stale and on-board figures with it. */
+        const val CONNECTION_STALE_MILLIS = 15L * 60 * 1000
 
         val none = OnBoard()
+        val stale = OnBoard(connectionStale = true)
 
-        fun freshOrNone(value: OnBoard, nowMillis: Long): OnBoard =
-            if (value.asOfMillis > 0 && nowMillis - value.asOfMillis <= FRESHNESS_WINDOW_MILLIS) {
-                value
-            } else {
-                none
-            }
+        fun unlessConnectionStale(value: OnBoard, latestReadingMillis: Long?, nowMillis: Long): OnBoard =
+            if (latestReadingMillis != null && nowMillis - latestReadingMillis <= CONNECTION_STALE_MILLIS) value else stale
     }
 }
