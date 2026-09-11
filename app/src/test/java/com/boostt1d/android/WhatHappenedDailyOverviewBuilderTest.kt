@@ -1,6 +1,10 @@
 package com.boostt1d.android
 
+import com.boostt1d.android.data.InsulinTherapyType
 import com.boostt1d.android.data.NightscoutGlucoseEntry
+import com.boostt1d.android.data.NightscoutProfileDocument
+import com.boostt1d.android.data.ProfileStoreEntry
+import com.boostt1d.android.data.TimeValue
 import com.boostt1d.android.data.NightscoutTreatment
 import com.boostt1d.android.data.TodaySoFarBuilder
 import com.boostt1d.android.engine.WhatHappenedDailyOverviewBuilder
@@ -40,7 +44,13 @@ class WhatHappenedDailyOverviewBuilderTest {
     private fun build(
         entries: List<NightscoutGlucoseEntry> = flatWeek(),
         treatments: List<NightscoutTreatment> = emptyList(),
-    ) = WhatHappenedDailyOverviewBuilder.build(entries, treatments, low, high, weekEnd, zone)
+        profile: NightscoutProfileDocument? = null,
+        therapyType: InsulinTherapyType = InsulinTherapyType.UNSPECIFIED,
+        nowMillis: Long = weekEnd,
+    ) = WhatHappenedDailyOverviewBuilder.build(
+        entries, treatments, low, high, weekEnd,
+        profile = profile, therapyType = therapyType, nowMillis = nowMillis, timeZone = zone,
+    )
 
     // MARK: - Shape
 
@@ -180,7 +190,7 @@ class WhatHappenedDailyOverviewBuilderTest {
         ).first()
 
         assertEquals(65.0, today.totalCarbs, 0.001)
-        assertEquals(6.5, today.totalInsulin, 0.001)
+        assertEquals(6.5, today.bolusInsulin, 0.001)
     }
 
     // MARK: - Fixtures
@@ -196,5 +206,73 @@ class WhatHappenedDailyOverviewBuilderTest {
             }
         }
         return result
+    }
+
+    // MARK: - Basal and TDD
+
+    private fun basalProfile(rate: Double) = NightscoutProfileDocument(
+        id = null,
+        defaultProfile = "Default",
+        store = mapOf(
+            "Default" to ProfileStoreEntry(
+                units = "mg/dl", dia = 4.0,
+                basal = listOf(TimeValue("00:00", rate)),
+                carbRatio = listOf(TimeValue("00:00", 15.0)),
+                sensitivity = listOf(TimeValue("00:00", 50.0)),
+                targetLow = emptyList(), targetHigh = emptyList(),
+            ),
+        ),
+        mills = null, startDate = null, createdAt = null, units = "mg/dl",
+    )
+
+    @Test
+    fun `without a therapy profile a day reports a bolus figure and no TDD`() {
+        val day = build(
+            treatments = listOf(NightscoutTreatment(eventType = "Bolus", mills = weekEnd - 3_600_000L, insulin = 5.0)),
+        ).first()
+        assertNull(day.basalInsulin)
+        assertNull(day.totalDailyDose)
+        assertEquals(5.0, day.bolusInsulin, 0.001)
+    }
+
+    @Test
+    fun `on a pump a settled day adds its whole scheduled basal to the bolus total`() {
+        val days = build(
+            treatments = listOf(NightscoutTreatment(eventType = "Bolus", mills = weekEnd - 26 * 3_600_000L, insulin = 5.0)),
+            profile = basalProfile(1.0),
+            therapyType = InsulinTherapyType.PUMP,
+            nowMillis = weekEnd,
+        )
+        // Days are newest first, and the newest is still running, so the day before it is the
+        // first one that covers twenty-four hours.
+        val yesterday = days[1]
+        assertEquals(24.0, yesterday.basalInsulin!!, 0.001)
+        assertEquals(5.0, yesterday.bolusInsulin, 0.001)
+        assertEquals(29.0, yesterday.totalDailyDose!!, 0.001)
+    }
+
+    @Test
+    fun `today is only counted up to now, never filled in from the schedule`() {
+        // Six hours into the newest day: six units of basal, not twenty-four.
+        val dayStart = TodaySoFarBuilder.startOfDay(weekEnd, zone)
+        val sixHoursIn = dayStart + 6 * 3_600_000L
+        val today = build(
+            profile = basalProfile(1.0),
+            therapyType = InsulinTherapyType.PUMP,
+            nowMillis = sixHoursIn,
+        ).first()
+        assertEquals(6.0, today.basalInsulin!!, 0.001)
+    }
+
+    @Test
+    fun `on injections the long-acting dose is already a treatment, so no schedule is added`() {
+        val day = build(
+            treatments = listOf(NightscoutTreatment(eventType = "Bolus", mills = weekEnd - 3_600_000L, insulin = 22.0)),
+            profile = basalProfile(1.0),
+            therapyType = InsulinTherapyType.INJECTIONS,
+            nowMillis = weekEnd,
+        ).first()
+        assertNull(day.basalInsulin)
+        assertNull(day.totalDailyDose)
     }
 }

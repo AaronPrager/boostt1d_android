@@ -1,7 +1,11 @@
 package com.boostt1d.android
 
+import com.boostt1d.android.data.InsulinTherapyType
 import com.boostt1d.android.data.NightscoutGlucoseEntry
+import com.boostt1d.android.data.NightscoutProfileDocument
 import com.boostt1d.android.data.NightscoutTreatment
+import com.boostt1d.android.data.ProfileStoreEntry
+import com.boostt1d.android.data.TimeValue
 import com.boostt1d.android.engine.DoctorVisitPeriod
 import com.boostt1d.android.engine.DoctorVisitReportBuilder
 import org.junit.Assert.assertEquals
@@ -76,5 +80,80 @@ class DoctorVisitReportBuilderTest {
         assertNull(report.exerciseAssociatedDeltaMgdL) // one exercise event is not enough
         assertTrue(report.deliverySummary.contains("No automation detected"))
         assertFalse(report.plainLanguageSummary.isEmpty())
+    }
+
+    // MARK: - Total daily dose
+
+    /** A flat basal schedule so the reconstruction has something to read. */
+    private fun basalProfile(rate: Double) = NightscoutProfileDocument(
+        id = null,
+        defaultProfile = "Default",
+        store = mapOf(
+            "Default" to ProfileStoreEntry(
+                units = "mg/dl", dia = 4.0,
+                basal = listOf(TimeValue("00:00", rate)),
+                carbRatio = listOf(TimeValue("00:00", 15.0)),
+                sensitivity = listOf(TimeValue("00:00", 50.0)),
+                targetLow = emptyList(), targetHigh = emptyList(),
+            ),
+        ),
+        mills = null, startDate = null, createdAt = null, units = "mg/dl",
+    )
+
+    @Test
+    fun `without a basal schedule the daily column stays a bolus figure`() {
+        val flat = entries(14) { _, _ -> 130.0 }
+        val boluses = (1..6).map { NightscoutTreatment(eventType = "Bolus", mills = at(it, 600), insulin = 4.0) }
+        val report = DoctorVisitReportBuilder.build(
+            flat, boluses, DoctorVisitPeriod.DAYS_7, 70.0, 180.0, null, nowMillis = now, timeZone = zone,
+        )
+        assertNull(report.averageDailyBasalUnits)
+        assertNull(report.averageTotalDailyDose)
+        assertNull(report.basalSharePercent)
+        assertTrue(report.insulinSummaryLine.startsWith("Average bolus insulin 4.0 u a day"))
+        assertTrue(report.insulinSummaryLine.contains("could not be reconstructed"))
+    }
+
+    @Test
+    fun `on a pump the daily column becomes a TDD and the summary splits it`() {
+        val flat = entries(14) { _, _ -> 130.0 }
+        val boluses = (1..6).map { NightscoutTreatment(eventType = "Bolus", mills = at(it, 600), insulin = 6.0) }
+        val report = DoctorVisitReportBuilder.build(
+            flat, boluses, DoctorVisitPeriod.DAYS_7, 70.0, 180.0, basalProfile(1.0),
+            nowMillis = now, timeZone = zone, therapyType = InsulinTherapyType.PUMP,
+        )
+        // Six whole days inside the window, each 24 basal units plus one 6 u bolus.
+        assertEquals(24.0, report.averageDailyBasalUnits!!, 0.0001)
+        assertEquals(6.0, report.averageDailyBolusUnits!!, 0.0001)
+        assertEquals(30.0, report.averageTotalDailyDose!!, 0.0001)
+        assertEquals(80.0, report.basalSharePercent!!, 0.0001)
+        assertTrue(report.insulinSummaryLine.startsWith("Average total daily dose 30.0 u over 6 full days"))
+        assertTrue(report.insulinSummaryLine.contains("24.0 u basal (80%)"))
+    }
+
+    @Test
+    fun `on injections the schedule is never laid on top of the logged long-acting dose`() {
+        val flat = entries(14) { _, _ -> 130.0 }
+        val doses = (1..6).map { NightscoutTreatment(eventType = "Bolus", mills = at(it, 600), insulin = 20.0) }
+        val report = DoctorVisitReportBuilder.build(
+            flat, doses, DoctorVisitPeriod.DAYS_7, 70.0, 180.0, basalProfile(1.0),
+            nowMillis = now, timeZone = zone, therapyType = InsulinTherapyType.INJECTIONS,
+        )
+        assertNull(report.averageDailyBasalUnits)
+        assertEquals(20.0, report.averageDailyBolusUnits!!, 0.0001)
+    }
+
+    @Test
+    fun `the part-days at each end of the period are printed but never averaged`() {
+        val flat = entries(14) { _, _ -> 130.0 }
+        val report = DoctorVisitReportBuilder.build(
+            flat, emptyList(), DoctorVisitPeriod.DAYS_7, 70.0, 180.0, basalProfile(1.0),
+            nowMillis = now, timeZone = zone, therapyType = InsulinTherapyType.PUMP,
+        )
+        // Eight calendar days are touched by a seven-day window that starts mid-day; the two
+        // the boundary cuts through are not whole days and are left out of the mean.
+        assertTrue(report.dailyProfiles.size > report.insulinDays.size)
+        assertTrue(report.insulinDays.all { it.isCompleteDay })
+        assertEquals(24.0, report.averageDailyBasalUnits!!, 0.0001)
     }
 }

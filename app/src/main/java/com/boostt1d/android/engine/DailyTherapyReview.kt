@@ -23,6 +23,15 @@ data class DailyTherapyProposal(
     val summary: String,
     val currentValue: Double?,
     val proposedValue: Double?,
+    /**
+     * What the week actually measured, before the step and the cap.
+     *
+     * Kept separate from [proposedValue] because they are rarely the same number: a loop
+     * running 48% above a 1.10 U/hr profile measures 1.63, and the suggestion is a bounded
+     * step toward that, not a jump to it. Without this the two tiles on screen look like
+     * arithmetic that does not work.
+     */
+    val observedValue: Double? = null,
     val priority: Priority,
     val evidenceStrength: TherapyEvidenceStrength,
     val sampleLabel: String,

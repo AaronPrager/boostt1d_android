@@ -57,6 +57,14 @@ data class NightscoutTreatment(
     val insulin: Double? = null,
     @Serializable(with = FlexibleDoubleOrNull::class)
     val carbs: Double? = null,
+    /**
+     * Meal fat and protein in grams. Trio, iAPS, AndroidAPS and Careportal write these when
+     * the user enters them; Loop and xDrip+ never do, so they are usually null.
+     */
+    @Serializable(with = FlexibleDoubleOrNull::class)
+    val fat: Double? = null,
+    @Serializable(with = FlexibleDoubleOrNull::class)
+    val protein: Double? = null,
     val notes: String? = null,
     @Serializable(with = FlexibleStringOrNull::class)
     val glucose: String? = null,

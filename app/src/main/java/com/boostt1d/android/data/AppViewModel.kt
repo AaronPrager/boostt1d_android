@@ -326,6 +326,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * A different-person source switch. Drops everything the old account put on this device
+     * and disconnects it, so the next download cannot pull that person's history back.
+     *
+     * Deleting readings alone is not enough: a Nightscout URL and token left in settings is
+     * still a valid treatment source, and the next sync would bring the old event log
+     * straight back. The credential goes with the readings. Ported from the iOS
+     * discardPreviousConnection.
+     */
+    fun discardPreviousConnection() {
+        viewModelScope.launch {
+            logs.deleteEverything()
+            credentials.clear()
+            withContext(Dispatchers.IO) {
+                analysisCache.invalidate()
+                detector.reset()
+                patternService.invalidateAll()
+                foodLog.deleteAll()
+            }
+            _reportSnapshot.value = null
+            _onBoard.value = OnBoard.none
+            _lastOutcome.value = null
+        }
+    }
+
     fun saveCredentials(nightscoutToken: String, dexcomPassword: String, librePassword: String) {
         credentials.nightscoutToken = nightscoutToken
         credentials.dexcomPassword = dexcomPassword

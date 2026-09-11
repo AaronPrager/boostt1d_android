@@ -30,11 +30,14 @@ import com.boostt1d.android.ui.BoostSegmented
 import com.boostt1d.android.ui.BoostSpacing
 import com.boostt1d.android.ui.BoostTheme
 import com.boostt1d.android.ui.CountryPickerDialog
+import com.boostt1d.android.ui.StatePickerDialog
+import com.boostt1d.android.ui.UsStates
 
 @Composable
 fun RegionStep(draft: OnboardingDraft, viewModel: OnboardingViewModel) {
     val colors = BoostTheme.colors
     var showingPicker by remember { mutableStateOf(false) }
+    var showingStatePicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -64,6 +67,32 @@ fun RegionStep(draft: OnboardingDraft, viewModel: OnboardingViewModel) {
             }
         }
 
+        if (draft.countryCode == UsStates.COUNTRY_CODE) {
+            Field("State") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(colors.surfaceMuted, RoundedCornerShape(BoostRadius.md))
+                        .border(1.dp, colors.border, RoundedCornerShape(BoostRadius.md))
+                        .clickable { showingStatePicker = true }
+                        .padding(horizontal = 12.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = draft.stateName.ifEmpty { "Select state" },
+                        color = if (draft.stateName.isEmpty()) colors.textTertiary else colors.textPrimary,
+                        fontSize = 15.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = colors.textTertiary,
+                    )
+                }
+            }
+        }
+
         Field("Glucose units") {
             BoostSegmented(
                 options = BGUnit.entries.toList(),
@@ -77,6 +106,14 @@ fun RegionStep(draft: OnboardingDraft, viewModel: OnboardingViewModel) {
             "Picked from your country. Change it if you read your numbers the other way.",
             fontSize = 12.sp,
             color = colors.textSecondary,
+        )
+    }
+
+    if (showingStatePicker) {
+        StatePickerDialog(
+            selected = draft.stateName,
+            onDismiss = { showingStatePicker = false },
+            onSelect = { viewModel.selectState(it); showingStatePicker = false },
         )
     }
 

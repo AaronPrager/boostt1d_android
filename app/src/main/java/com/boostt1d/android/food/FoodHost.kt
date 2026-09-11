@@ -8,7 +8,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.boostt1d.android.bolus.BolusPrefill
 import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.FoodAnalysis
 import com.boostt1d.android.data.FoodLogRepository
@@ -41,9 +40,10 @@ fun FoodHost(
     onBoard: OnBoard,
     connection: GlucoseConnectionOption,
     unit: BGUnit,
+    lowMgdl: Double,
+    highMgdl: Double,
     nowMillis: Long,
     onImportTreatments: () -> Unit,
-    onOpenBolusCalculator: (BolusPrefill) -> Unit,
     onOpenTherapyProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -64,9 +64,10 @@ fun FoodHost(
             onImportTreatments = onImportTreatments, modifier = modifier,
         )
         FoodRoute.Snap -> FoodAnalysisScreen(
-            backend = backend, usage = usage, logs = logs, onBoard = onBoard, connection = connection, unit = unit, nowMillis = nowMillis,
+            backend = backend, usage = usage, logs = logs, onBoard = onBoard, connection = connection, unit = unit,
+            lowMgdl = lowMgdl, highMgdl = highMgdl, nowMillis = nowMillis,
             onSaveToFoodLog = { analysis, image -> route = FoodRoute.SaveAnalysis(analysis, image) },
-            onOpenBolusCalculator = onOpenBolusCalculator, onOpenTherapyProfile = onOpenTherapyProfile, modifier = modifier,
+            onOpenTherapyProfile = onOpenTherapyProfile, modifier = modifier,
         )
         is FoodRoute.Edit -> FoodEntrySheet(foodLog, current.entryId, null, null, nowMillis, onDone = { route = FoodRoute.Log }, modifier = modifier)
         is FoodRoute.SaveAnalysis -> FoodEntrySheet(foodLog, null, current.analysis, current.image, nowMillis, onDone = { route = FoodRoute.Log }, modifier = modifier)

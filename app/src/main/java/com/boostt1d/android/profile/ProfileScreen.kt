@@ -74,6 +74,8 @@ import com.boostt1d.android.ui.BoostSpacing
 import com.boostt1d.android.ui.BoostTextField
 import com.boostt1d.android.ui.BoostTheme
 import com.boostt1d.android.ui.CountryPickerDialog
+import com.boostt1d.android.ui.StatePickerDialog
+import com.boostt1d.android.ui.UsStates
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -118,6 +120,8 @@ fun ProfileScreen(
     var highMgdl by remember { mutableStateOf(settings.highGlucose) }
     var problem by remember { mutableStateOf<String?>(null) }
     var showingCountryPicker by remember { mutableStateOf(false) }
+    var stateName by remember { mutableStateOf(profile.state.orEmpty()) }
+    var showingStatePicker by remember { mutableStateOf(false) }
     var showingDeleteConfirmation by remember { mutableStateOf(false) }
     var legalDocument by remember { mutableStateOf<LegalText.Document?>(null) }
 
@@ -274,6 +278,27 @@ fun ProfileScreen(
                 }
             }
 
+            // Only asked of users in the United States, exactly as on iOS. Anywhere else the
+            // field is meaningless and the stored value is cleared on save.
+            if (countryCode == UsStates.COUNTRY_CODE) {
+                LabelledField("State") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(colors.surfaceMuted, RoundedCornerShape(BoostRadius.md))
+                            .border(1.dp, colors.border, RoundedCornerShape(BoostRadius.md))
+                            .clickable { showingStatePicker = true }
+                            .padding(horizontal = 12.dp, vertical = 16.dp),
+                    ) {
+                        Text(
+                            stateName.ifEmpty { "Select state" },
+                            color = if (stateName.isEmpty()) colors.textTertiary else colors.textPrimary,
+                            fontSize = 15.sp,
+                        )
+                    }
+                }
+            }
+
             LabelledField("Glucose units") {
                 BoostSegmented(
                     options = BGUnit.entries.toList(),
@@ -407,6 +432,7 @@ fun ProfileScreen(
                             photoData = photoBase64,
                             country = countryName,
                             countryCode = countryCode,
+                            state = if (countryCode == UsStates.COUNTRY_CODE) stateName.ifEmpty { null } else null,
                             dateOfBirthEpochMillis = januaryFirst(currentYear - (ageValue ?: 0)),
                             dateOfDiagnosisEpochMillis = if (hasDiabetes) {
                                 januaryFirst(currentYear - OnboardingValidation.yearsValue(years))
@@ -471,12 +497,22 @@ fun ProfileScreen(
         LegalDocumentDialog(document) { legalDocument = null }
     }
 
+    if (showingStatePicker) {
+        StatePickerDialog(
+            selected = stateName,
+            onDismiss = { showingStatePicker = false },
+            onSelect = { stateName = it; showingStatePicker = false },
+        )
+    }
+
     if (showingCountryPicker) {
         CountryPickerDialog(
             onDismiss = { showingCountryPicker = false },
             onSelect = { country ->
                 countryCode = country.code
                 countryName = country.name
+                // A state from a previous country is worse than no state at all.
+                if (country.code != UsStates.COUNTRY_CODE) stateName = ""
                 showingCountryPicker = false
             },
         )

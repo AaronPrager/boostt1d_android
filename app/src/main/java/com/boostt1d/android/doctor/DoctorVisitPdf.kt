@@ -230,7 +230,13 @@ class DoctorVisitPdf(private val context: Context) {
             fun fit(needed: Float, cursor: Float) = ensureSpace(needed, cursor, header.continued())
 
             y = drawSectionTitle("Day by day", y)
-            y = drawDailyTable(report.dailyProfiles.take(report.period.days), y) { cursor -> fit(DAILY_TABLE_HEADER_HEIGHT + DAILY_TABLE_ROW_HEIGHT, cursor) }
+            y = drawBody(report.insulinSummaryLine, y, margin, contentWidth)
+            y += 4
+            y = drawDailyTable(
+                report.dailyProfiles.take(report.period.days),
+                insulinColumnTitle = if (report.averageDailyBasalUnits == null) "Bolus" else "TDD",
+                y = y,
+            ) { cursor -> fit(DAILY_TABLE_HEADER_HEIGHT + DAILY_TABLE_ROW_HEIGHT, cursor) }
 
             // Page 1 already carries the headline patterns with their discussion prompts.
             val remaining = report.patterns.drop(PAGE_PATTERN_LIMIT)
@@ -560,9 +566,14 @@ class DoctorVisitPdf(private val context: Context) {
         }
 
         /** One row per day covering glucose and treatments. Paginates through [onOverflow]. */
-        private fun drawDailyTable(profiles: List<DoctorVisitDailyProfile>, y: Float, onOverflow: (Float) -> Float): Float {
+        private fun drawDailyTable(
+            profiles: List<DoctorVisitDailyProfile>,
+            insulinColumnTitle: String,
+            y: Float,
+            onOverflow: (Float) -> Float,
+        ): Float {
             val columns = listOf(0f, contentWidth * 0.24f, contentWidth * 0.46f, contentWidth * 0.66f, contentWidth * 0.84f)
-            val titles = listOf("Day", "Average", "Time in range", "Insulin", "Carbs")
+            val titles = listOf("Day", "Average", "Time in range", insulinColumnTitle, "Carbs")
             val hp = paint(10f, MUTED, Weight.SEMIBOLD)
             val cp = paint(10f, INK)
 
@@ -580,13 +591,23 @@ class DoctorVisitPdf(private val context: Context) {
                     profile.weekdayLabel,
                     profile.averageGlucoseMgdL?.let { "${it.roundToInt()} mg/dL" } ?: "—",
                     profile.timeInRangePercent?.let { pct(it) } ?: "—",
-                    if (profile.insulinUnits > 0) fmt("%.1f u", profile.insulinUnits) else "—",
+                    dailyInsulinLabel(profile),
                     if (profile.carbsGrams > 0) fmt("%.0f g", profile.carbsGrams) else "—",
                 )
                 values.zip(columns).forEach { (value, offset) -> text(value, margin + offset, cursor, cp) }
                 cursor += DAILY_TABLE_ROW_HEIGHT
             }
             return cursor
+        }
+
+        /**
+         * A day's insulin: the total daily dose where basal is known, the bolus figure where
+         * it is not, and a dash where nothing was logged.
+         */
+        private fun dailyInsulinLabel(profile: DoctorVisitDailyProfile): String {
+            val tdd = profile.totalDailyDose
+            if (tdd != null && tdd > 0) return fmt("%.1f u", tdd)
+            return if (profile.insulinUnits > 0) fmt("%.1f u", profile.insulinUnits) else "—"
         }
 
         private fun drawFooter() {

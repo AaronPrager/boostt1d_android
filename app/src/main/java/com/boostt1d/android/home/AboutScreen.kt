@@ -3,7 +3,9 @@ package com.boostt1d.android.home
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.boostt1d.android.logs.ScreenScaffold
@@ -14,12 +16,17 @@ import com.boostt1d.android.ui.BoostTheme
 @Composable
 fun AboutScreen(modifier: Modifier = Modifier) {
     val colors = BoostTheme.colors
+    val context = LocalContext.current
+    val version = remember(context) {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
+            .getOrNull() ?: "unknown"
+    }
 
     ScreenScaffold(title = "About", subtitle = "Version and legal", modifier = modifier) {
         item {
             BoostCard {
                 Text("BoostT1D for Android", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
-                Text("Version 0.1 — manual logging", fontSize = 14.sp, color = colors.textSecondary)
+                Text("Version $version", fontSize = 14.sp, color = colors.textSecondary)
             }
         }
 
@@ -52,10 +59,11 @@ fun AboutScreen(modifier: Modifier = Modifier) {
                     color = colors.textPrimary,
                 )
                 Text(
-                    "Everything you log stays on this device. Nothing is uploaded, and no " +
-                        "CGM is connected — glucose, carbs and doses are whatever you enter " +
-                        "by hand. Connecting Nightscout, Dexcom or FreeStyle Libre, food " +
-                        "photos and the insight reports are still being built.",
+                    "Glucose can come from Nightscout, Dexcom Share, FreeStyle Libre, or from " +
+                        "what you enter by hand. Readings, meals and doses are stored on this " +
+                        "device. Two features send data out: a meal photo goes to the BoostT1D " +
+                        "proxy for a carb estimate, and once a day the seven-day therapy " +
+                        "review is sent for wording. Neither carries your name.",
                     fontSize = 14.sp,
                     color = colors.textSecondary,
                 )

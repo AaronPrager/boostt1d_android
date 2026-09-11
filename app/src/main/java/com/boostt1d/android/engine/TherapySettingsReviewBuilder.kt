@@ -85,8 +85,13 @@ object TherapySettingsReviewBuilder {
     private const val ISF_MISMATCH_PERCENT = 15.0
     private const val CARB_RATIO_MISMATCH_PERCENT = 12.0
 
-    /** No single review may move a setting more than this. Clinicians step; they do not jump. */
-    private const val MAX_CHANGE_PERCENT = 20.0
+    /**
+     * No single review may move a setting more than this. Clinicians step; they do not jump.
+     *
+     * Read by the proposal detail screen too, which has to explain why a suggestion stops
+     * short of what the week measured.
+     */
+    const val MAX_CHANGE_PERCENT = 20.0
     /** Half the distance to what was measured — the rest waits for the next review to confirm. */
     private const val STEP_FRACTION = 0.5
 
@@ -684,7 +689,7 @@ object TherapySettingsReviewBuilder {
     // bar, and one fewer required day so that signal can surface.
 
     /** A stretch during which the loop delivered at a rate other than the profile's. */
-    private class TempBasalInterval(val start: Long, val end: Long, /** Absolute U/hr. */ val rate: Double)
+    class TempBasalInterval(val start: Long, val end: Long, /** Absolute U/hr. */ val rate: Double)
 
     private fun isLoopOvernightHour(hour: Int): Boolean = hour >= LOOP_OVERNIGHT_START_HOUR || hour < LOOP_OVERNIGHT_END_HOUR
     private fun loopCarbShadowHours(hour: Int): Double = if (isLoopOvernightHour(hour)) LOOP_OVERNIGHT_CARB_SHADOW_HOURS else CARB_SHADOW_HOURS
@@ -959,6 +964,16 @@ object TherapySettingsReviewBuilder {
      * the same thing for some and a percentage of profile for others. A value above 10 cannot
      * be a basal rate in U/hr, so it is read as a percentage.
      */
+    /**
+     * The same parse, for callers outside the review that only have a time zone. Kept as an
+     * overload so the interval logic exists once.
+     */
+    fun tempBasalIntervals(
+        treatments: List<NightscoutTreatment>,
+        settings: TherapyProfileSettings,
+        timeZone: TimeZone,
+    ): List<TempBasalInterval> = tempBasalIntervals(treatments, settings, Clock(timeZone))
+
     private fun tempBasalIntervals(treatments: List<NightscoutTreatment>, settings: TherapyProfileSettings, clock: Clock): List<TempBasalInterval> {
         val result = mutableListOf<TempBasalInterval>()
         // Uploaders end a temp basal early with a zero-duration "Temp Basal" record. Dropping

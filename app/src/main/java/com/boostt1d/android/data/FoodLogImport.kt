@@ -46,6 +46,8 @@ object FoodLogImport {
                 recordedAtMillis = treatment.recordedAtMillis,
                 descriptionText = description,
                 carbsGrams = treatment.carbs ?: 0.0,
+                fatGrams = treatment.fat?.takeIf { it > 0 },
+                proteinGrams = treatment.protein?.takeIf { it > 0 },
                 notes = notes(treatment, description),
                 source = source(treatment).rawValue,
                 linkedTreatmentId = treatment.cacheKey,

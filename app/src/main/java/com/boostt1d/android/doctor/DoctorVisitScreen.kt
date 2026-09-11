@@ -47,6 +47,7 @@ import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.Config
 import com.boostt1d.android.data.GlucoseCacheRules
 import com.boostt1d.android.data.NightscoutGlucoseEntry
+import com.boostt1d.android.engine.DoctorVisitDailyProfile
 import com.boostt1d.android.engine.DoctorVisitPeriod
 import com.boostt1d.android.engine.DoctorVisitReport
 import com.boostt1d.android.engine.DoctorVisitTherapySegment
@@ -262,15 +263,18 @@ private fun LazyListScope.clinicalPage(
         ClinicalCard("Insulin & carbohydrates by day") {
             if (report.dailyProfiles.none { it.hasInsulinOrCarbs }) Secondary("No insulin or carb treatments in this window (or none synced yet).")
             else {
+                Secondary(report.insulinSummaryLine, size = 12.sp)
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Text("Day", fontSize = 12.sp, color = colors.textSecondary, modifier = Modifier.weight(1f))
-                    Text("Insulin", fontSize = 12.sp, color = colors.textSecondary, textAlign = TextAlign.End, modifier = Modifier.width(64.dp))
+                    // The column is a TDD only where basal could be worked out. Labelling it
+                    // that way regardless would misstate a number a clinician may act on.
+                    Text(if (report.averageDailyBasalUnits == null) "Bolus" else "TDD", fontSize = 12.sp, color = colors.textSecondary, textAlign = TextAlign.End, modifier = Modifier.width(64.dp))
                     Text("Carbs", fontSize = 12.sp, color = colors.textSecondary, textAlign = TextAlign.End, modifier = Modifier.width(56.dp))
                 }
                 report.dailyProfiles.take(period.days).forEach { day ->
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
                         Text(day.weekdayLabel, fontSize = 15.sp, color = colors.textPrimary, modifier = Modifier.weight(1f))
-                        Text(if (day.insulinUnits > 0) String.format(Locale.US, "%.1fu", day.insulinUnits) else "—", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = colors.primary, textAlign = TextAlign.End, modifier = Modifier.width(64.dp))
+                        Text(dayInsulinLabel(day), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = colors.primary, textAlign = TextAlign.End, modifier = Modifier.width(64.dp))
                         Text(if (day.carbsGrams > 0) String.format(Locale.US, "%.0fg", day.carbsGrams) else "—", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = colors.high, textAlign = TextAlign.End, modifier = Modifier.width(56.dp))
                     }
                 }
@@ -519,3 +523,13 @@ private fun Secondary(text: String, size: androidx.compose.ui.unit.TextUnit = 15
     Text(text, fontSize = size, color = BoostTheme.colors.textSecondary, modifier = Modifier.padding(top = topPadding))
 
 private fun pct(value: Double): String = "${value.roundToInt()}%"
+
+/**
+ * A day's insulin: the total daily dose where basal is known, the bolus figure where it is
+ * not, and a dash where nothing was logged.
+ */
+private fun dayInsulinLabel(day: DoctorVisitDailyProfile): String {
+    val tdd = day.totalDailyDose
+    if (tdd != null && tdd > 0) return String.format(Locale.US, "%.1fu", tdd)
+    return if (day.insulinUnits > 0) String.format(Locale.US, "%.1fu", day.insulinUnits) else "—"
+}

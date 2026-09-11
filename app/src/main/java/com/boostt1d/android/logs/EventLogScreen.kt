@@ -34,6 +34,10 @@ import androidx.compose.ui.unit.sp
 import com.boostt1d.android.data.EventType
 import com.boostt1d.android.data.LogRepository
 import com.boostt1d.android.data.LogState
+import com.boostt1d.android.dashboard.VendorCgmNotice
+import com.boostt1d.android.dashboard.VendorCgmNoticeContext
+import com.boostt1d.android.dashboard.vendorFor
+import com.boostt1d.android.data.GlucoseConnectionOption
 import com.boostt1d.android.data.NightscoutTreatment
 import com.boostt1d.android.ui.BoostCard
 import com.boostt1d.android.ui.BoostRadius
@@ -50,6 +54,9 @@ fun EventLogScreen(
     nowMillis: Long,
     onAddEvent: (String, Long, Double?, Double?, String?, Int?) -> Unit,
     onDeleteTreatment: (String) -> Unit,
+    /** The glucose source, so a vendor CGM can explain its own empty list. */
+    connection: GlucoseConnectionOption = GlucoseConnectionOption.MANUAL,
+    onOpenDataSource: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = BoostTheme.colors
@@ -141,6 +148,18 @@ fun EventLogScreen(
                         }
                     }
                 }
+            }
+        }
+
+        // Dexcom Share and LibreLinkUp carry no treatment data, so an empty log there is the
+        // source's limit rather than something the user forgot to do.
+        vendorFor(connection)?.let { vendor ->
+            item {
+                VendorCgmNotice(
+                    context = VendorCgmNoticeContext.EVENT_LOG,
+                    vendor = vendor,
+                    onConfigureNightscout = onOpenDataSource,
+                )
             }
         }
 

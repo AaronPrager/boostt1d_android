@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -31,6 +32,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,7 +51,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.sp
+import com.boostt1d.android.bolus.BolusCalculatorScreen
 import com.boostt1d.android.bolus.BolusPrefill
 import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.Config
@@ -82,15 +87,23 @@ fun FoodAnalysisScreen(
     onBoard: OnBoard,
     connection: GlucoseConnectionOption,
     unit: BGUnit,
+    lowMgdl: Double,
+    highMgdl: Double,
     nowMillis: Long,
     onSaveToFoodLog: (FoodAnalysis, Bitmap?) -> Unit,
-    onOpenBolusCalculator: (BolusPrefill) -> Unit,
     onOpenTherapyProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = BoostTheme.colors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    /**
+     * The calculator opens over this screen rather than replacing it, the way the iOS sheet
+     * does. Navigating away to the calculator threw the analysis out, and there was no way
+     * back to save the meal it had just estimated.
+     */
+    var calculatorPrefill by remember { mutableStateOf<BolusPrefill?>(null) }
 
     var selectedImage by remember { mutableStateOf<Bitmap?>(null) }
     var isAnalyzing by remember { mutableStateOf(false) }
@@ -225,7 +238,7 @@ fun FoodAnalysisScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = { onSaveToFoodLog(analysis, selectedImage) }, shape = RoundedCornerShape(BoostRadius.md), colors = ButtonDefaults.buttonColors(containerColor = colors.inRange), modifier = Modifier.weight(1f)) { Text("Save to Food Log", fontWeight = FontWeight.SemiBold, maxLines = 1) }
                     if (!current.needsProfile) {
-                        Button(onClick = { onOpenBolusCalculator(BolusPrefill(analysis.carbsGrams ?: 0.0, current.currentGlucoseMgdl, current.iob, current.cob)) }, shape = RoundedCornerShape(BoostRadius.md), colors = ButtonDefaults.buttonColors(containerColor = colors.primary), modifier = Modifier.weight(1f)) { Text("Bolus Calculator", fontWeight = FontWeight.SemiBold, maxLines = 1) }
+                        Button(onClick = { calculatorPrefill = BolusPrefill(analysis.carbsGrams ?: 0.0, current.currentGlucoseMgdl, current.iob, current.cob) }, shape = RoundedCornerShape(BoostRadius.md), colors = ButtonDefaults.buttonColors(containerColor = colors.primary), modifier = Modifier.weight(1f)) { Text("Bolus Calculator", fontWeight = FontWeight.SemiBold, maxLines = 1) }
                     }
                 }
             }
@@ -278,6 +291,26 @@ fun FoodAnalysisScreen(
             confirmButton = {},
             dismissButton = { TextButton(onClick = { showingPhotoChoice = false }) { Text("Cancel", color = colors.textSecondary) } },
         )
+    }
+
+    calculatorPrefill?.let { prefill ->
+        Dialog(
+            onDismissRequest = { calculatorPrefill = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(color = colors.background, modifier = Modifier.fillMaxSize()) {
+                BolusCalculatorScreen(
+                    logs = logs,
+                    therapy = logs.therapy,
+                    unit = unit,
+                    lowMgdl = lowMgdl,
+                    highMgdl = highMgdl,
+                    nowMillis = nowMillis,
+                    prefill = prefill,
+                    onClose = { calculatorPrefill = null },
+                )
+            }
+        }
     }
 }
 

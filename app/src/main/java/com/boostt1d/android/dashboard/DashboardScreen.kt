@@ -63,6 +63,8 @@ fun DashboardScreen(
     onRefresh: () -> Unit,
     onAddReading: () -> Unit,
     onOpenHistory: () -> Unit,
+    /** Opens the Data Source screen from the glucose-only notice. */
+    onOpenDataSource: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = BoostTheme.colors
@@ -121,6 +123,19 @@ fun DashboardScreen(
                 onRefresh = if (settings.isManualMode) onAddReading else onRefresh,
                 onAddReading = onAddReading,
             )
+        }
+
+        // Dexcom Share and LibreLinkUp send readings and nothing else, so the empty insulin
+        // and carb tiles below need a reason next to them rather than an apology about
+        // Nightscout not having published anything.
+        vendorFor(settings.connection)?.let { vendor ->
+            item {
+                VendorCgmNotice(
+                    context = VendorCgmNoticeContext.DASHBOARD,
+                    vendor = vendor,
+                    onConfigureNightscout = onOpenDataSource,
+                )
+            }
         }
 
         item {
@@ -220,6 +235,11 @@ private fun StillOnBoard(onBoard: OnBoard, connection: GlucoseConnectionOption) 
                     GlucoseConnectionOption.MANUAL ->
                         "Your pump or loop reports these. Nothing is connected, so there is " +
                             "nothing to read them from."
+                    // Dexcom and Libre carry no treatment data at all, so there is nothing
+                    // to wait for and saying otherwise would send someone hunting a fault.
+                    GlucoseConnectionOption.DEXCOM, GlucoseConnectionOption.LIBRE ->
+                        "${connection.displayName} sends readings only. These come from " +
+                            "Nightscout or from what you log yourself."
                     else -> if (onBoard.connectionStale) {
                         "Your last reading is over 15 minutes old, so these stay hidden until " +
                             "readings resume."

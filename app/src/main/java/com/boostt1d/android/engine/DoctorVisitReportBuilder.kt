@@ -12,6 +12,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 enum class DoctorVisitPeriod(val days: Int, val title: String) {
@@ -45,8 +47,25 @@ data class DoctorVisitDailyProfile(
     val carbsGrams: Double,
     val mealCount: Int,
     val bolusCount: Int,
+    /**
+     * Basal delivered that day. Null when it cannot be reconstructed: no basal schedule in
+     * the profile, or someone on injections whose long-acting dose is already in
+     * [insulinUnits].
+     */
+    val basalUnits: Double? = null,
+    /**
+     * False for the two days a period boundary cuts through. They are still printed, but a
+     * part-day would drag a per-day average down for no clinical reason.
+     */
+    val isCompleteDay: Boolean = true,
 ) {
     val hasInsulinOrCarbs: Boolean get() = insulinUnits > 0 || carbsGrams > 0 || mealCount > 0 || bolusCount > 0
+
+    /**
+     * Total daily dose. Null whenever the basal side is unknown, so nothing on screen calls a
+     * bolus total a TDD.
+     */
+    val totalDailyDose: Double? get() = basalUnits?.let { it + insulinUnits }
 }
 
 data class DoctorVisitReport(
@@ -81,6 +100,79 @@ data class DoctorVisitReport(
     val therapy: DoctorVisitTherapySnapshot = DoctorVisitTherapySnapshot(),
 ) {
     val hasEnoughData: Boolean get() = current.readingCount >= 24
+
+    /**
+     * Whole days with something logged. The denominator for every per-day insulin average,
+     * which is why the part-days at each end of the period are dropped.
+     */
+    val insulinDays: List<DoctorVisitDailyProfile>
+        get() = dailyProfiles.filter { it.isCompleteDay && (it.hasInsulinOrCarbs || it.basalUnits != null) }
+
+    val averageDailyBolusUnits: Double?
+        get() {
+            val days = insulinDays
+            if (days.isEmpty()) return null
+            return days.sumOf { it.insulinUnits } / days.size
+        }
+
+    /**
+     * Null unless every counted day has a basal figure. A mean over some days with basal and
+     * some without is a number nobody can act on.
+     */
+    val averageDailyBasalUnits: Double?
+        get() {
+            val days = insulinDays
+            if (days.isEmpty()) return null
+            val basals = days.mapNotNull { it.basalUnits }
+            if (basals.size != days.size) return null
+            return basals.sum() / days.size
+        }
+
+    /** Average total daily dose, basal plus bolus. */
+    val averageTotalDailyDose: Double?
+        get() {
+            val basal = averageDailyBasalUnits ?: return null
+            val bolus = averageDailyBolusUnits ?: return null
+            return basal + bolus
+        }
+
+    /** Share of the total daily dose delivered as basal, the split a clinician reads first. */
+    val basalSharePercent: Double?
+        get() {
+            val basal = averageDailyBasalUnits ?: return null
+            val total = averageTotalDailyDose ?: return null
+            if (total <= 0) return null
+            return basal / total * 100
+        }
+
+    /** One line stating the daily dose, or what is missing from it. */
+    val insulinSummaryLine: String
+        get() {
+            val dayCount = insulinDays.size
+            if (dayCount == 0) return "No insulin logged in this window."
+            val dayLabel = if (dayCount == 1) "1 full day" else "$dayCount full days"
+
+            val tdd = averageTotalDailyDose
+            val basal = averageDailyBasalUnits
+            val bolus = averageDailyBolusUnits
+            val share = basalSharePercent
+            if (tdd != null && basal != null && bolus != null && share != null) {
+                return String.format(
+                    Locale.US,
+                    "Average total daily dose %.1f u over %s: %.1f u basal (%.0f%%), %.1f u bolus.",
+                    tdd, dayLabel, basal, share, bolus,
+                )
+            }
+            if (bolus != null) {
+                return String.format(
+                    Locale.US,
+                    "Average bolus insulin %.1f u a day over %s. Basal is not in this figure: " +
+                        "it could not be reconstructed from the uploaded data.",
+                    bolus, dayLabel,
+                )
+            }
+            return "No insulin logged in this window."
+        }
 
     val changeSummaryLines: List<String>
         get() {
@@ -206,7 +298,10 @@ object DoctorVisitReportBuilder {
             exerciseAssociatedDeltaMgdL = exerciseAssociatedDelta(periodEntries, periodTreatments, timeZone),
             recurrentHighBlocks = recurrentBlocks(periodEntries, highMgdL, above = true, kind = "High", timeZone = timeZone),
             recurrentLowBlocks = recurrentBlocks(periodEntries, lowMgdL, above = false, kind = "Low", timeZone = timeZone),
-            dailyProfiles = dailyProfiles(periodEntries, periodTreatments, lowMgdL, highMgdL, periodStart, periodEnd, timeZone),
+            dailyProfiles = dailyProfiles(
+                periodEntries, periodTreatments, lowMgdL, highMgdL, periodStart, periodEnd,
+                therapyProfile, therapyType, timeZone,
+            ),
             patterns = detected,
             doseSuggestions = doseSuggestions,
             deliverySummary = InsulinDeliveryContext(periodTreatments, therapyType).clinicalSummary,
@@ -231,10 +326,14 @@ object DoctorVisitReportBuilder {
 
     private fun dailyProfiles(
         entries: List<NightscoutGlucoseEntry>, treatments: List<NightscoutTreatment>,
-        lowMgdL: Double, highMgdL: Double, startMillis: Long, endMillis: Long, timeZone: TimeZone,
+        lowMgdL: Double, highMgdL: Double, startMillis: Long, endMillis: Long,
+        profile: NightscoutProfileDocument?, therapyType: InsulinTherapyType, timeZone: TimeZone,
     ): List<DoctorVisitDailyProfile> {
         val formatter = SimpleDateFormat("EEE M/d", Locale.getDefault()).apply { this.timeZone = timeZone }
         val calendar = Calendar.getInstance(timeZone)
+        val settings = TherapyProfileSettings(profile)
+        val tempBasals = BasalDeliveryCalculator.intervals(treatments, settings, timeZone)
+        val countsScheduledBasal = BasalDeliveryCalculator.countsScheduledBasal(treatments, therapyType, settings)
         val profiles = mutableListOf<DoctorVisitDailyProfile>()
         var cursor = TodaySoFarBuilder.startOfDay(startMillis, timeZone)
         val endDay = TodaySoFarBuilder.startOfDay(endMillis, timeZone)
@@ -253,7 +352,25 @@ object DoctorVisitReportBuilder {
                 t.insulin?.takeIf { it > 0 }?.let { dayInsulin += it; dayBoluses += 1 }
                 t.carbs?.takeIf { it > 0 }?.let { dayCarbs += it; dayMeals += 1 }
             }
-            profiles += DoctorVisitDailyProfile(cursor, formatter.format(Date(cursor)), avg, tir, dayEntries.size, dayInsulin, dayCarbs, dayMeals, dayBoluses)
+            // Basal is counted over the part of the day the period actually covers, the same
+            // stretch the boluses above were taken from. A first or last day counted in full
+            // would report insulin from outside the window.
+            val basalStart = max(cursor, startMillis)
+            val basalEnd = min(next, endMillis)
+            val dayBasal: Double? = if (
+                countsScheduledBasal && basalEnd > basalStart && (dayEntries.isNotEmpty() || dayTreatments.isNotEmpty())
+            ) {
+                BasalDeliveryCalculator.units(basalStart, basalEnd, tempBasals, settings, timeZone)
+            } else {
+                null
+            }
+
+            profiles += DoctorVisitDailyProfile(
+                cursor, formatter.format(Date(cursor)), avg, tir, dayEntries.size,
+                dayInsulin, dayCarbs, dayMeals, dayBoluses,
+                basalUnits = dayBasal,
+                isCompleteDay = cursor >= startMillis && next <= endMillis,
+            )
             cursor = next
         }
         return profiles.reversed()

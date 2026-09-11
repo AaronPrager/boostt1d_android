@@ -62,6 +62,8 @@ fun ConnectionFields(
     onLibreUsernameChange: (String) -> Unit,
     onLibrePasswordChange: (String) -> Unit,
     onLibreRegionChange: (LibreRegion) -> Unit,
+    /** Opens the LibreLinkUp walkthrough. */
+    onOpenLibreHelp: () -> Unit = {},
     onTest: () -> Unit,
     testing: Boolean,
     testResult: String?,
@@ -190,6 +192,16 @@ fun ConnectionFields(
             }
 
             GlucoseConnectionOption.LIBRE -> {
+                // Getting a Libre sensor into a follower account is the step people get
+                // stuck on, and no amount of field hint text replaces the walkthrough.
+                Text(
+                    "How do I set this up?",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.primary,
+                    modifier = Modifier.clickable(onClick = onOpenLibreHelp),
+                )
+
                 Column(verticalArrangement = Arrangement.spacedBy(BoostSpacing.xs)) {
                     BoostFieldLabel("LibreLinkUp email")
                     BoostTextField(

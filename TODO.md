@@ -258,3 +258,70 @@ once-daily therapy review — and the same two are live here.
 - [x] Verified on the emulator against the test instance: all three pages on live data, the 14-day
       switch, the share sheet with a 160 KB six-page PDF, and the AGP in BG Log's 3-day window
 
+
+---
+
+# Phase 6: catching up with iOS
+
+Everything the parity sweep found missing, built in one pass. 344 unit tests, all green.
+
+## Ported from iOS commits Android never saw
+
+- [x] `BasalDeliveryCalculator`, basal delivered over a stretch of time, temp basals
+      time-weighted and the profile rate filling every uncovered minute. `tempBasalIntervals`
+      is now shared out of the review builder rather than copied, so one arithmetic serves
+      both screens and a TDD cannot disagree between them
+- [x] What Happened? day cards carry `basalInsulin` and a `totalDailyDose`. Today is only
+      counted up to now: filling the rest of the day from the schedule would show insulin
+      the user has not taken yet. The chip reads "TDD 30.0u" where basal is known and
+      "6.0u bolus" where it is not, never one label for both
+- [x] Doctor Visit: `basalUnits` and `isCompleteDay` per day, and the report's
+      `averageTotalDailyDose`, `basalSharePercent` and `insulinSummaryLine`. The two days a
+      period boundary cuts through are printed but never averaged. The daily column header
+      says Bolus or TDD depending on whether basal could be reconstructed at all, on screen
+      and in the PDF
+- [x] `fat` and `protein` on `NightscoutTreatment`, carried into imported food-log rows and
+      shown as their own badges. Trio, iAPS, AndroidAPS and Careportal write them
+- [x] `observedValue` on `DailyTherapyProposal`, and the proposal screen now says why the
+      suggestion stops short of it: half the gap, and never more than 20% in one review.
+      `MAX_CHANGE_PERCENT` is no longer private because that sentence needs it
+- [x] Analysis cache schema 4 → 5, since the persisted day shape gained a field
+
+## Screens iOS had and this build did not
+
+- [x] How It Works, the nine-page product tour, reachable from Menu at any time
+- [x] Help, ten step-by-step guides, list and chapter. Wording follows Android where the
+      two platforms differ: connection settings live on Data Source, not inside Profile, and
+      secrets go to EncryptedSharedPreferences rather than the Keychain
+- [x] Support Us, the donation page. `SUPPORT_PAGE_URL` had been sitting in `Config`
+      unread since phase 1. Stripe handles checkout in a browser; no card detail reaches
+      this process
+- [x] Play In-App Review, the same cadence iOS uses with StoreKit: first ask at five
+      qualified opens, then every twenty-five, never in the first three days, never twice in
+      ninety days, never twice on one version. The decision is a pure `ReviewCadence` so it
+      could be tested without a device
+- [x] Coaching tips above the bottom bar. Android has no TipKit, so the parts of it the app
+      used are reproduced: a tip waits for the tour to finish, shows at most twice, retires
+      when dismissed, and only one appears on any given day. iOS declares two further tips
+      that are never attached to a view; those are not ported
+- [x] The glucose-only notice for Dexcom Share and LibreLinkUp. Both vendors have the same
+      limitation so the copy is shared and only the product name changes. On the dashboard it
+      explains the empty insulin and carb tiles, which used to claim a loop had not published
+      yet. There is no loop to wait for. Also on Data Source while the source is being
+      chosen, and on the Event Log, which iOS writes the copy for but never shows
+- [x] The LibreLinkUp walkthrough behind "How do I set this up?". Abbott has no read API, so
+      the setup is a sharing invitation and people get stuck on it
+- [x] State, asked only of users in the United States. `state` had been on both `UserProfile`
+      and the registration payload since phase 2 and was always sent null, because there was
+      no field to fill it
+- [x] "Is this the same person?" before a source switch. Answering no wipes stored data and
+      disconnects the old account, credential included: dropping readings while leaving a
+      Nightscout URL and token in settings still left a valid treatment source, and the next
+      download pulled that account's event log straight back
+- [x] About no longer describes the phase 1 build. It reads the version from the package and
+      says what actually leaves the device
+
+## Still open
+
+- [ ] **Server route.** `RegistrationService` posts to `/api/android/register-profile`, which
+      the backend does not serve. The client is finished; the route is not.

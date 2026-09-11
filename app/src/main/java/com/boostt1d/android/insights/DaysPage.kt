@@ -77,7 +77,15 @@ private fun DayCard(day: WhatHappenedDayOverview, unit: BGUnit) {
         // upload is a fact about the sensor, not about the day.
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (day.meals.isNotEmpty()) SmallChip(Icons.Filled.Restaurant, "${day.totalCarbs.roundToInt()}g", colors.carbs)
-            if (day.totalInsulin > 0) SmallChip(Icons.Filled.Vaccines, "${Fmt.units(day.totalInsulin)}u", colors.insulin)
+            // TDD where basal is known, the bolus figure where it is not. Labelled either
+            // way, because a number that is sometimes one and sometimes the other is worse
+            // than no number.
+            val tdd = day.totalDailyDose
+            if (tdd != null && tdd > 0) {
+                SmallChip(Icons.Filled.Vaccines, "TDD ${Fmt.units(tdd)}u", colors.insulin)
+            } else if (day.bolusInsulin > 0) {
+                SmallChip(Icons.Filled.Vaccines, "${Fmt.units(day.bolusInsulin)}u bolus", colors.insulin)
+            }
             if (day.activity.isNotEmpty()) SmallChip(Icons.Filled.DirectionsRun, "${day.activity.size}", colors.clinical)
             if (day.lowMoments.isNotEmpty()) SmallChip(Icons.Filled.Warning, "${day.lowMoments.size} low", colors.low)
             if (day.notes.isNotEmpty()) SmallChip(Icons.Filled.Notes, "${day.notes.size}", colors.insight)

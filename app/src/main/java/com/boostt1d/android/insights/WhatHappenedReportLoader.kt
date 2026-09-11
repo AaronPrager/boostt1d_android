@@ -76,7 +76,11 @@ class WhatHappenedReportLoader(
             nowMillis = nowMillis,
         )
 
-        val daily = WhatHappenedDailyOverviewBuilder.build(entries, treatments, lowGlucose, highGlucose, weekEndMillis = weekEnd, timeZone = timeZone)
+        val daily = WhatHappenedDailyOverviewBuilder.build(
+            entries, treatments, lowGlucose, highGlucose,
+            weekEndMillis = weekEnd, profile = profile, therapyType = therapyType,
+            nowMillis = nowMillis, timeZone = timeZone,
+        )
 
         // Identical settings append nothing, so this is safe on every load; a hand-entered
         // profile that changed since the last save is what it catches.

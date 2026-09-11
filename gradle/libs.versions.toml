@@ -16,6 +16,7 @@ ksp = "2.0.21-1.0.28"
 coroutines = "1.9.0"
 okhttp = "4.12.0"
 securityCrypto = "1.1.0-alpha06"
+playReview = "2.0.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -44,6 +45,7 @@ androidx-security-crypto = { group = "androidx.security", name = "security-crypt
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+play-review = { group = "com.google.android.play", name = "review-ktx", version.ref = "playReview" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

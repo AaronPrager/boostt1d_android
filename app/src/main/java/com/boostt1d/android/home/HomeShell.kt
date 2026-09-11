@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,11 +22,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.MedicalServices
@@ -36,6 +41,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -50,6 +56,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.boostt1d.android.ui.BoostRadius
@@ -72,6 +79,9 @@ enum class HomeDestination {
     DATA_SOURCE,
     THERAPY_PROFILE,
     SETTINGS,
+    HOW_IT_WORKS,
+    HELP,
+    SUPPORT,
     ABOUT,
 }
 
@@ -103,6 +113,9 @@ private data class SubmenuItem(
 fun HomeShell(
     destination: HomeDestination,
     onSelect: (HomeDestination) -> Unit,
+    /** The coaching tip to show above the bar, or null. The caller owns the rules. */
+    tip: BoostTipId? = null,
+    onDismissTip: (BoostTipId) -> Unit = {},
     content: @Composable (Modifier) -> Unit,
 ) {
     val colors = BoostTheme.colors
@@ -120,11 +133,16 @@ fun HomeShell(
         SubmenuItem("BG Log", "Readings and charts", Icons.Filled.ShowChart, HomeDestination.BLOOD_GLUCOSE),
         SubmenuItem("Event Log", "Insulin, carbs and events", Icons.AutoMirrored.Filled.MenuBook, HomeDestination.EVENT_LOG),
     )
+    // Eight destinations do not fit one column above the bar, so Menu lays them out two
+    // across, as iOS does. Every item is visible on the first tap.
     val menuItems = listOf(
-        SubmenuItem("Data Source", "Nightscout or manual entry", Icons.Filled.Cloud, HomeDestination.DATA_SOURCE),
-        SubmenuItem("Insulin Doses", "Basal, carb ratio, correction", Icons.Filled.Tune, HomeDestination.THERAPY_PROFILE),
-        SubmenuItem("Insulin Calculator", "How a bolus is worked out", Icons.Filled.Calculate, HomeDestination.BOLUS_CALCULATOR),
-        SubmenuItem("Profile", "Units, range and account", Icons.Filled.Person, HomeDestination.SETTINGS),
+        SubmenuItem("Data Source", "Nightscout or manual", Icons.Filled.Cloud, HomeDestination.DATA_SOURCE),
+        SubmenuItem("Insulin Doses", "Basal, I:C and ISF", Icons.Filled.Tune, HomeDestination.THERAPY_PROFILE),
+        SubmenuItem("Calculator", "How a bolus works", Icons.Filled.Calculate, HomeDestination.BOLUS_CALCULATOR),
+        SubmenuItem("Profile", "Units and account", Icons.Filled.Person, HomeDestination.SETTINGS),
+        SubmenuItem("How It Works", "Product tutorial", Icons.AutoMirrored.Filled.MenuBook, HomeDestination.HOW_IT_WORKS),
+        SubmenuItem("Help", "Setup guides", Icons.AutoMirrored.Filled.HelpOutline, HomeDestination.HELP),
+        SubmenuItem("Support Us", "Optional donation", Icons.Filled.Favorite, HomeDestination.SUPPORT),
         SubmenuItem("About", "Version and legal", Icons.Filled.Info, HomeDestination.ABOUT),
     )
 
@@ -183,7 +201,13 @@ fun HomeShell(
                 enter = slideInVertically { it } + fadeIn(),
                 exit = slideOutVertically { it } + fadeOut(),
             ) {
-                Submenu(menuItems, destination) { onSelect(it); openTab = null }
+                Submenu(menuItems, destination, columns = 2) { onSelect(it); openTab = null }
+            }
+
+            // A tip sits directly above the bar it is talking about. It never covers the bar
+            // itself, so the thing it points at stays tappable while it is up.
+            if (tip != null && openTab == null) {
+                TipBubble(tip, onDismiss = { onDismissTip(tip) })
             }
 
             BottomBar(
@@ -208,6 +232,7 @@ fun HomeShell(
 private fun Submenu(
     items: List<SubmenuItem>,
     current: HomeDestination,
+    columns: Int = 1,
     onSelect: (HomeDestination) -> Unit,
 ) {
     val colors = BoostTheme.colors
@@ -219,36 +244,89 @@ private fun Submenu(
             .padding(BoostSpacing.xs),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        items.forEach { item ->
-            val isCurrent = item.destination == current
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        if (isCurrent) colors.primary.copy(alpha = 0.10f) else Color.Transparent,
-                        RoundedCornerShape(BoostRadius.lg),
-                    )
-                    .clickable { onSelect(item.destination) }
-                    .padding(horizontal = BoostSpacing.sm, vertical = BoostSpacing.sm),
-                horizontalArrangement = Arrangement.spacedBy(BoostSpacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    item.icon,
-                    contentDescription = null,
-                    tint = if (isCurrent) colors.primary else colors.textSecondary,
-                    modifier = Modifier.size(22.dp),
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        item.label,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.textPrimary,
-                    )
-                    Text(item.detail, fontSize = 13.sp, color = colors.textSecondary)
+        if (columns > 1) {
+            items.chunked(columns).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    row.forEach { item ->
+                        SubmenuRow(item, item.destination == current, Modifier.weight(1f)) { onSelect(item.destination) }
+                    }
+                    // An odd last row keeps its column width rather than stretching one tile
+                    // across the whole sheet.
+                    repeat(columns - row.size) { Box(modifier = Modifier.weight(1f)) }
                 }
             }
+        } else {
+            items.forEach { item ->
+                SubmenuRow(item, item.destination == current, Modifier.fillMaxWidth()) { onSelect(item.destination) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubmenuRow(
+    item: SubmenuItem,
+    isCurrent: Boolean,
+    modifier: Modifier,
+    onSelect: () -> Unit,
+) {
+    val colors = BoostTheme.colors
+    Row(
+        modifier = modifier
+            .background(
+                if (isCurrent) colors.primary.copy(alpha = 0.10f) else Color.Transparent,
+                RoundedCornerShape(BoostRadius.lg),
+            )
+            .clickable(onClick = onSelect)
+            .padding(horizontal = BoostSpacing.sm, vertical = BoostSpacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(BoostSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            item.icon,
+            contentDescription = null,
+            tint = if (isCurrent) colors.primary else colors.textSecondary,
+            modifier = Modifier.size(22.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                item.label,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                item.detail,
+                fontSize = 13.sp,
+                color = colors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TipBubble(tip: BoostTipId, onDismiss: () -> Unit) {
+    val colors = BoostTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = BoostSpacing.sm)
+            .background(colors.surface, RoundedCornerShape(BoostRadius.lg))
+            .border(1.dp, colors.primary.copy(alpha = 0.35f), RoundedCornerShape(BoostRadius.lg))
+            .padding(BoostSpacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
+    ) {
+        Icon(Icons.Filled.Lightbulb, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(tip.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+            Text(tip.message, fontSize = 13.sp, color = colors.textSecondary)
+        }
+        IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+            Icon(Icons.Filled.Close, contentDescription = "Dismiss tip", tint = colors.textTertiary, modifier = Modifier.size(18.dp))
         }
     }
 }

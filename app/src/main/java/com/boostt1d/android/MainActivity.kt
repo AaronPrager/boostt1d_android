@@ -6,6 +6,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.unit.dp
+import com.boostt1d.android.ui.BoostHeartMark
+import com.boostt1d.android.ui.BoostSpacing
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -28,12 +33,17 @@ import com.boostt1d.android.dashboard.DashboardScreen
 import com.boostt1d.android.data.AppState
 import com.boostt1d.android.data.AppViewModel
 import com.boostt1d.android.home.AboutScreen
+import com.boostt1d.android.home.BoostTipId
+import com.boostt1d.android.home.BoostTips
+import com.boostt1d.android.home.HelpScreen
 import com.boostt1d.android.home.HomeDestination
 import com.boostt1d.android.home.HomeShell
+import com.boostt1d.android.home.ReviewRequestService
+import com.boostt1d.android.home.SupportScreen
+import com.boostt1d.android.home.TutorialScreen
 import com.boostt1d.android.food.FoodHost
 import com.boostt1d.android.food.FoodStart
 import com.boostt1d.android.sync.InitialDataDownloadScreen
-import com.boostt1d.android.bolus.BolusPrefill
 import com.boostt1d.android.data.GlucoseConnectionOption
 import com.boostt1d.android.insights.InsightsScreen
 import com.boostt1d.android.doctor.DoctorVisitScreen
@@ -90,9 +100,19 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
     val aiReviewLoading by viewModel.aiReviewLoading.collectAsStateWithLifecycle()
 
     var destination by remember { mutableStateOf(HomeDestination.DASHBOARD) }
-    // Carried from Snap a Meal into the calculator; cleared whenever the shell navigates,
-    // so the menu's own calculator starts empty.
-    var bolusPrefill by remember { mutableStateOf<BolusPrefill?>(null) }
+
+    // Help and Support link out to the web. The browser is the only place a donation or a
+    // Nightscout guide belongs, so the app hands the URL over rather than embedding one.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val openUrl: (String) -> Unit = remember(context) {
+        { url ->
+            runCatching {
+                context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+            }
+        }
+    }
+    val tips = remember(context) { BoostTips(context) }
+    var activeTip by remember { mutableStateOf<BoostTipId?>(null) }
     var showingAddReading by remember { mutableStateOf(false) }
     var showingAddEvent by remember { mutableStateOf(false) }
 
@@ -126,7 +146,15 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
             modifier = Modifier.fillMaxSize().background(BoostTheme.colors.background),
             contentAlignment = Alignment.Center,
         ) {
-            CircularProgressIndicator(color = BoostTheme.colors.primary)
+            // The mark, not a bare spinner: this is the first thing anyone sees, and the
+            // system splash that precedes it shows the same heart.
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(BoostSpacing.lg),
+            ) {
+                BoostHeartMark(width = 96.dp)
+                CircularProgressIndicator(color = BoostTheme.colors.primary)
+            }
         }
 
         AppState.NeedsOnboarding -> OnboardingScreen(onFinished = {
@@ -134,13 +162,35 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
         })
 
         is AppState.Ready -> {
+            // One qualified open per process, counted once the app is actually usable rather
+            // than at launch. The service decides whether that open is due a rating prompt.
+            LaunchedEffect(Unit) {
+                (context as? android.app.Activity)?.let { activity ->
+                    ReviewRequestService(context).registerQualifiedOpen(activity, appVersion(context))
+                }
+            }
+
+            // At most one coaching tip per day, and only on the dashboard: a tip that follows
+            // the user into every screen stops being a tip.
+            LaunchedEffect(Unit) {
+                tips.nextTip(System.currentTimeMillis())?.let { next ->
+                    tips.recordShown(next, System.currentTimeMillis())
+                    activeTip = next
+                }
+            }
+
             // Back returns to the dashboard rather than closing the app from a submenu
             // destination — leaving the app should take a deliberate second press.
             BackHandler(enabled = destination != HomeDestination.DASHBOARD) {
                 destination = HomeDestination.DASHBOARD
             }
 
-            HomeShell(destination = destination, onSelect = { bolusPrefill = null; destination = it }) { modifier ->
+            HomeShell(
+                destination = destination,
+                onSelect = { destination = it },
+                tip = activeTip.takeIf { destination == HomeDestination.DASHBOARD },
+                onDismissTip = { tips.dismiss(it); activeTip = null },
+            ) { modifier ->
                 when (destination) {
                     HomeDestination.DASHBOARD -> DashboardScreen(
                         profile = current.profile,
@@ -152,6 +202,7 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         onRefresh = { viewModel.syncNow(current.settings) },
                         onAddReading = { showingAddReading = true },
                         onOpenHistory = { destination = HomeDestination.BLOOD_GLUCOSE },
+                        onOpenDataSource = { destination = HomeDestination.DATA_SOURCE },
                         modifier = modifier,
                     )
 
@@ -164,9 +215,10 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         onBoard = onBoard,
                         connection = current.settings.connection,
                         unit = current.profile.bgUnit,
+                        lowMgdl = current.settings.lowGlucose,
+                        highMgdl = current.settings.highGlucose,
                         nowMillis = nowMillis,
                         onImportTreatments = viewModel::importCarbsIntoFoodLog,
-                        onOpenBolusCalculator = { bolusPrefill = it; destination = HomeDestination.BOLUS_CALCULATOR },
                         onOpenTherapyProfile = { destination = HomeDestination.THERAPY_PROFILE },
                         modifier = modifier,
                     )
@@ -232,6 +284,8 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         nowMillis = nowMillis,
                         onAddEvent = viewModel::addTreatment,
                         onDeleteTreatment = viewModel::deleteTreatment,
+                        connection = current.settings.connection,
+                        onOpenDataSource = { destination = HomeDestination.DATA_SOURCE },
                         modifier = modifier,
                     )
 
@@ -242,7 +296,6 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         lowMgdl = current.settings.lowGlucose,
                         highMgdl = current.settings.highGlucose,
                         nowMillis = nowMillis,
-                        prefill = bolusPrefill,
                         modifier = modifier,
                     )
 
@@ -260,6 +313,9 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         onBack = { destination = HomeDestination.DASHBOARD },
                         onDeleteEverything = {
                             viewModel.deleteEverything()
+                            // Setup runs again after a wipe, so the tour and its tips should
+                            // be waiting for whoever sets the app up next.
+                            tips.resetAll()
                             destination = HomeDestination.DASHBOARD
                         },
                         advancedTherapyDetail = advancedDetail,
@@ -283,9 +339,22 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                             viewModel.saveSettings(updated)
                             viewModel.syncNow(updated)
                         },
+                        onDiscardPreviousConnection = viewModel::discardPreviousConnection,
                         onSyncNow = { viewModel.syncNow(current.settings) },
                         modifier = modifier,
                     )
+
+                    HomeDestination.HOW_IT_WORKS -> TutorialScreen(
+                        onFinished = {
+                            tips.markTutorialCompleted()
+                            destination = HomeDestination.DASHBOARD
+                        },
+                        modifier = modifier,
+                    )
+
+                    HomeDestination.HELP -> HelpScreen(onOpenUrl = openUrl, modifier = modifier)
+
+                    HomeDestination.SUPPORT -> SupportScreen(onOpenUrl = openUrl, modifier = modifier)
 
                     HomeDestination.ABOUT -> AboutScreen(modifier = modifier)
                 }
@@ -312,3 +381,8 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
         }
     }
 }
+
+/** The versionName Play shows, or a placeholder when the package cannot be read. */
+private fun appVersion(context: android.content.Context): String =
+    runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
+        .getOrNull() ?: "unknown"

@@ -226,6 +226,9 @@ object DailyTherapyReviewService {
             val enrichment = aiByKey[key]
             // U/hr cannot be translated into a long-acting injection change safely.
             val proposedValue = if (delivery.therapyType == InsulinTherapyType.INJECTIONS && finding.parameter == TherapyParameter.BASAL) null else finding.suggestedValue
+            // Suppressed for the same reason as the suggestion: a rate in U/hr says nothing
+            // useful to someone taking one long-acting injection a day.
+            val observedValue = if (delivery.therapyType == InsulinTherapyType.INJECTIONS && finding.parameter == TherapyParameter.BASAL) null else finding.observedValue
 
             DailyTherapyProposal(
                 id = key,
@@ -235,6 +238,7 @@ object DailyTherapyReviewService {
                 summary = finding.headline,
                 currentValue = finding.currentValue,
                 proposedValue = proposedValue,
+                observedValue = observedValue,
                 priority = finding.priority,
                 evidenceStrength = finding.strength,
                 sampleLabel = finding.sampleLabel,

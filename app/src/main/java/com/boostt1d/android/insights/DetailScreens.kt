@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TurnSharpRight
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -36,6 +37,7 @@ import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.engine.DailyTherapyProposal
 import com.boostt1d.android.engine.TherapyChangeOutcome
 import com.boostt1d.android.engine.TherapyParameter
+import com.boostt1d.android.engine.TherapySettingsReviewBuilder
 import com.boostt1d.android.logs.ScreenScaffold
 import com.boostt1d.android.ui.BoostCard
 import com.boostt1d.android.ui.BoostDivider
@@ -70,6 +72,7 @@ fun TherapyProposalDetailScreen(proposal: DailyTherapyProposal, unit: BGUnit, sh
     val current = proposal.currentValue
     val proposed = proposal.proposedValue
     val plainChange = if (current != null && proposed != null && current != proposed) proposal.parameter.plainChangeSentence(increasing = proposed > current) else null
+    val measuredNote = measuredNote(proposal, unit)
 
     ScreenScaffold(title = null, subtitle = null, modifier = modifier) {
         detailHeader(proposal.parameter.plainName, onBack)
@@ -105,6 +108,12 @@ fun TherapyProposalDetailScreen(proposal: DailyTherapyProposal, unit: BGUnit, sh
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Icon(Icons.Filled.TurnSharpRight, contentDescription = null, tint = colors.clinical, modifier = Modifier.size(14.dp))
                             Text(it, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = colors.clinical)
+                        }
+                    }
+                    measuredNote?.let {
+                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Filled.Straighten, contentDescription = null, tint = colors.textTertiary, modifier = Modifier.size(14.dp))
+                            Text(it, fontSize = 11.sp, color = colors.textTertiary)
                         }
                     }
                 }
@@ -152,6 +161,26 @@ private fun LazyListScope.listBlock(title: String, lines: List<String>) {
             lines.forEach { BulletLine(it, colors.textTertiary) }
         }
     }
+}
+
+/**
+ * Why the suggested number is not the measured one.
+ *
+ * Shown only when the suggestion genuinely stopped short: the measurement lies beyond it in
+ * the direction of the change, and the two do not print as the same value. Side by side with
+ * no explanation, "48% above profile" over a 1.10 to 1.30 step reads as a bug.
+ */
+private fun measuredNote(proposal: DailyTherapyProposal, unit: BGUnit): String? {
+    val current = proposal.currentValue ?: return null
+    val proposed = proposal.proposedValue ?: return null
+    val observed = proposal.observedValue ?: return null
+    val observedText = proposalValue(proposal.parameter, observed, unit)
+    if (observedText == proposalValue(proposal.parameter, proposed, unit)) return null
+    val movingUp = proposed > current
+    if (if (movingUp) observed <= proposed else observed >= proposed) return null
+    val cap = TherapySettingsReviewBuilder.MAX_CHANGE_PERCENT.roundToInt()
+    return "Measured $observedText. The suggestion moves part of the way there: half the gap, " +
+        "and never more than $cap% in one review."
 }
 
 private fun proposalValue(parameter: TherapyParameter, value: Double, unit: BGUnit): String = when (parameter) {

@@ -150,17 +150,23 @@ private fun FoodLogRow(entry: FoodLogEntryEntity, onClick: () -> Unit) {
         }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(entry.descriptionText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary, maxLines = 2)
-            entry.carbsGrams?.let {
-                Text(
-                    "${formatCarbs(it)}g carbs", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = colors.carbs,
-                    modifier = Modifier.background(colors.carbs.copy(alpha = 0.12f), RoundedCornerShape(BoostRadius.pillLike)).padding(horizontal = 8.dp, vertical = 3.dp),
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                entry.carbsGrams?.let { NutrientBadge("${formatCarbs(it)}g carbs", colors.carbs) }
+                entry.fatGrams?.let { NutrientBadge("${formatCarbs(it)}g fat", colors.food) }
+                entry.proteinGrams?.let { NutrientBadge("${formatCarbs(it)}g protein", colors.food) }
             }
             Text(Fmt.dayTime(entry.recordedAtMillis), fontSize = 11.sp, color = colors.textTertiary)
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.textTertiary)
     }
 }
+
+/** One nutrient pill on a food-log row. Same shape whatever the nutrient. */
+@Composable
+private fun NutrientBadge(text: String, color: Color) = Text(
+    text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = color,
+    modifier = Modifier.background(color.copy(alpha = 0.12f), RoundedCornerShape(BoostRadius.pillLike)).padding(horizontal = 8.dp, vertical = 3.dp),
+)
 
 internal fun formatCarbs(value: Double): String =
     if (value % 1.0 == 0.0) String.format(Locale.US, "%.0f", value) else String.format(Locale.US, "%.1f", value)

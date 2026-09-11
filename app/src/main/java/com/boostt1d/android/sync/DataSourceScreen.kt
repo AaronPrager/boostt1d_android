@@ -15,11 +15,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +40,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.boostt1d.android.background.BatteryExemption
 import com.boostt1d.android.background.SyncReminders
+import com.boostt1d.android.dashboard.VendorCgmNotice
+import com.boostt1d.android.dashboard.VendorCgmNoticeContext
+import com.boostt1d.android.dashboard.vendorFor
 import com.boostt1d.android.data.GlucoseConnectionOption
 import com.boostt1d.android.data.GlucoseSettings
 import com.boostt1d.android.sync.DexcomRegion
@@ -72,6 +77,11 @@ fun DataSourceScreen(
     onTestDexcom: suspend (String, String, DexcomRegion) -> Result<Unit>,
     onTestLibre: suspend (String, String, LibreRegion) -> Result<LibreVerification>,
     onSave: (GlucoseSettings, String, String, String) -> Unit,
+    /**
+     * A different-person switch: wipe stored data and disconnect the old account before the
+     * new settings are saved. Not called when the user keeps their history.
+     */
+    onDiscardPreviousConnection: () -> Unit = {},
     onSyncNow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -90,6 +100,10 @@ fun DataSourceScreen(
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testSucceeded by remember { mutableStateOf<Boolean?>(null) }
+    /** Settings waiting on the same-person question. Null whenever nothing is being asked. */
+    var pendingSave by remember { mutableStateOf<GlucoseSettings?>(null) }
+    var confirmingWipe by remember { mutableStateOf(false) }
+    var showingLibreHelp by remember { mutableStateOf(false) }
 
     val dirty = connection != settings.connection ||
         url.trim() != settings.nightscoutUrl ||
@@ -175,6 +189,7 @@ fun DataSourceScreen(
                     onLibreUsernameChange = { libreUsername = it; testResult = null },
                     onLibrePasswordChange = { librePassword = it; testResult = null },
                     onLibreRegionChange = { libreRegion = it; testResult = null },
+                    onOpenLibreHelp = { showingLibreHelp = true },
                     onTest = {
                         scope.launch {
                             testing = true
@@ -220,8 +235,7 @@ fun DataSourceScreen(
 
                 Button(
                     onClick = {
-                        onSave(
-                            settings.copy(
+                        val updated = settings.copy(
                                 connection = connection,
                                 nightscoutUrl = if (connection == GlucoseConnectionOption.NIGHTSCOUT) {
                                     NightscoutUrl.normalize(url)
@@ -247,11 +261,15 @@ fun DataSourceScreen(
                                 } else {
                                     0L
                                 },
-                            ),
-                            token.trim(),
-                            dexcomPassword,
-                            librePassword,
-                        )
+                            )
+                        // Changing source is the one edit that can mix two people's data on
+                        // one device, so it asks before it lands. Everything else saves
+                        // straight through.
+                        if (connection != settings.connection) {
+                            pendingSave = updated
+                        } else {
+                            onSave(updated, token.trim(), dexcomPassword, librePassword)
+                        }
                     },
                     enabled = dirty,
                     shape = RoundedCornerShape(BoostRadius.md),
@@ -264,6 +282,14 @@ fun DataSourceScreen(
                 ) {
                     Text("Save and sync")
                 }
+            }
+        }
+
+        // Keyed on the selection rather than the saved setting, so the limitation is on
+        // screen while someone is deciding, not after they have committed to it.
+        vendorFor(connection)?.let { vendor ->
+            item {
+                VendorCgmNotice(context = VendorCgmNoticeContext.DATA_SOURCE, vendor = vendor)
             }
         }
 
@@ -280,6 +306,74 @@ fun DataSourceScreen(
                         "manual entry filling a gap the sensor never saw is kept.",
                 )
             }
+        }
+    }
+
+    if (showingLibreHelp) LibreSetupHelpDialog(onDismiss = { showingLibreHelp = false })
+
+    pendingSave?.let { updated ->
+        val fromName = settings.connection.displayName
+        val toName = connection.displayName
+        if (confirmingWipe) {
+            AlertDialog(
+                onDismissRequest = { confirmingWipe = false; pendingSave = null },
+                containerColor = BoostTheme.colors.surface,
+                title = { Text("Delete stored data?", color = BoostTheme.colors.textPrimary) },
+                text = {
+                    Text(
+                        "Glucose readings, event log entries and food log meals stored on this " +
+                            "device will be deleted, and $fromName will be disconnected so it " +
+                            "cannot supply data again. The new source will start filling history " +
+                            "from now on. This cannot be undone.",
+                        color = BoostTheme.colors.textSecondary,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmingWipe = false
+                        pendingSave = null
+                        onDiscardPreviousConnection()
+                        // The credential store was just cleared, so only the new source's
+                        // secret is handed back. Passing the old one would restore it.
+                        onSave(
+                            updated,
+                            if (connection == GlucoseConnectionOption.NIGHTSCOUT) token.trim() else "",
+                            if (connection == GlucoseConnectionOption.DEXCOM) dexcomPassword else "",
+                            if (connection == GlucoseConnectionOption.LIBRE) librePassword else "",
+                        )
+                    }) { Text("Delete and switch", color = BoostTheme.colors.low) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmingWipe = false; pendingSave = null }) {
+                        Text("Cancel", color = BoostTheme.colors.textSecondary)
+                    }
+                },
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { pendingSave = null },
+                containerColor = BoostTheme.colors.surface,
+                title = { Text("Is this the same person?", color = BoostTheme.colors.textPrimary) },
+                text = {
+                    Text(
+                        "You're switching from $fromName to $toName. If both accounts belong to " +
+                            "the same person, stored data is kept. If not, it should be deleted " +
+                            "so the two are not mixed.",
+                        color = BoostTheme.colors.textSecondary,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        pendingSave = null
+                        onSave(updated, token.trim(), dexcomPassword, librePassword)
+                    }) { Text("Yes, keep history", color = BoostTheme.colors.primary) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmingWipe = true }) {
+                        Text("No, different person", color = BoostTheme.colors.low)
+                    }
+                },
+            )
         }
     }
 }

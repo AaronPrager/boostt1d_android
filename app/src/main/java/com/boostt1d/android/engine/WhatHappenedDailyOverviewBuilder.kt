@@ -1,6 +1,8 @@
 package com.boostt1d.android.engine
 
+import com.boostt1d.android.data.InsulinTherapyType
 import com.boostt1d.android.data.NightscoutGlucoseEntry
+import com.boostt1d.android.data.NightscoutProfileDocument
 import com.boostt1d.android.data.NightscoutTreatment
 import com.boostt1d.android.data.TodaySoFarBuilder
 import kotlinx.serialization.Serializable
@@ -39,9 +41,25 @@ data class WhatHappenedDayOverview(
     val activity: List<WhatHappenedDayEvent>,
     val notes: List<WhatHappenedDayEvent>,
     val lowMoments: List<WhatHappenedDayEvent>,
+
+    /**
+     * Basal insulin delivered that day: temp basals time-weighted, the profile rate filling
+     * every uncovered minute.
+     *
+     * Null when it cannot be worked out, which is a real state and not a zero: a profile with
+     * no basal schedule, a day with nothing logged, or someone on injections whose
+     * long-acting dose is a treatment and is already inside the bolus total.
+     */
+    val basalInsulin: Double? = null,
 ) {
     val totalCarbs: Double get() = meals.mapNotNull { it.carbs }.sum()
-    val totalInsulin: Double get() = meals.mapNotNull { it.insulin }.sum() + boluses.mapNotNull { it.insulin }.sum()
+    val bolusInsulin: Double get() = meals.mapNotNull { it.insulin }.sum() + boluses.mapNotNull { it.insulin }.sum()
+
+    /**
+     * Total daily dose, basal plus bolus. Null whenever the basal side is unknown, so the
+     * screen can show a bolus figure rather than call a bolus total a TDD.
+     */
+    val totalDailyDose: Double? get() = basalInsulin?.let { it + bolusInsulin }
     val hasAnyActivity: Boolean
         get() = readingCount > 0 || meals.isNotEmpty() || boluses.isNotEmpty() ||
             activity.isNotEmpty() || notes.isNotEmpty() || lowMoments.isNotEmpty()
@@ -71,6 +89,9 @@ object WhatHappenedDailyOverviewBuilder {
         lowMgdL: Double,
         highMgdL: Double,
         weekEndMillis: Long,
+        profile: NightscoutProfileDocument?,
+        therapyType: InsulinTherapyType,
+        nowMillis: Long,
         timeZone: TimeZone = TimeZone.getDefault(),
     ): List<WhatHappenedDayOverview> {
         val locale = Locale.getDefault()
@@ -81,6 +102,10 @@ object WhatHappenedDailyOverviewBuilder {
         val calendar = Calendar.getInstance(timeZone)
         val endDay = TodaySoFarBuilder.startOfDay(weekEndMillis, timeZone)
         val startDay = calendar.run { timeInMillis = endDay; add(Calendar.DAY_OF_MONTH, -6); timeInMillis }
+
+        val settings = TherapyProfileSettings(profile)
+        val tempBasals = BasalDeliveryCalculator.intervals(treatments, settings, timeZone)
+        val countsScheduledBasal = BasalDeliveryCalculator.countsScheduledBasal(treatments, therapyType, settings)
 
         val days = mutableListOf<WhatHappenedDayOverview>()
         var cursor = startDay
@@ -167,6 +192,17 @@ object WhatHappenedDailyOverviewBuilder {
                 )
             }
 
+            // Today is still running, so basal is only counted up to now. Filling the rest of
+            // the day from the schedule would show a TDD the user has not taken yet.
+            val basalEnd = min(next, nowMillis)
+            val basal: Double? = if (
+                countsScheduledBasal && basalEnd > cursor && (dayEntries.isNotEmpty() || dayTreatments.isNotEmpty())
+            ) {
+                BasalDeliveryCalculator.units(cursor, basalEnd, tempBasals, settings, timeZone)
+            } else {
+                null
+            }
+
             // Compact low markers: one per contiguous stretch, labeled with start time + min.
             val lowMoments = compactLowMoments(dayEntries, lowMgdL, timeFormatter)
 
@@ -186,6 +222,7 @@ object WhatHappenedDailyOverviewBuilder {
                 activity = activity,
                 notes = notes,
                 lowMoments = lowMoments,
+                basalInsulin = basal,
             )
 
             cursor = next

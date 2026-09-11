@@ -132,7 +132,7 @@ class WhatHappenedAnalysisCache(private val store: AnalysisCacheStore = InMemory
          * Bumped whenever any persisted type gains or loses a field. A mismatch is treated as
          * no cache at all, which is the only safe reading of a payload written by another build.
          */
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
 
         /** Digest of the settings the review reasons about, so editing basal, ISF or carb ratio drops the cached answer. */
         fun profileDigest(profile: NightscoutProfileDocument?): Int {

@@ -20,6 +20,7 @@ import com.boostt1d.android.data.PhotoScaling
 import com.boostt1d.android.data.ProfileRepository
 import com.boostt1d.android.data.UserProfile
 import kotlinx.coroutines.Dispatchers
+import com.boostt1d.android.ui.UsStates
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
@@ -73,10 +74,16 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
      * following — otherwise picking a country would silently undo a deliberate choice.
      */
     fun selectCountry(code: String, name: String) {
-        draft = draft.copy(countryCode = code, countryName = name)
+        // A state from a previous country is worse than no state at all.
+        val state = if (code == UsStates.COUNTRY_CODE) draft.stateName else ""
+        draft = draft.copy(countryCode = code, countryName = name, stateName = state)
         if (!hasManuallyChangedUnit) {
             draft = draft.copy(bgUnit = GlucoseDisplay.defaultUnit(code))
         }
+    }
+
+    fun selectState(name: String) {
+        draft = draft.copy(stateName = name)
     }
 
     fun selectUnit(unit: com.boostt1d.android.data.BGUnit) {
@@ -238,7 +245,7 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
             photoData = draft.photoBase64,
             country = resolvedCountry,
             countryCode = resolvedCode,
-            state = null,
+            state = draft.stateName.ifEmpty { null },
             dateOfBirthEpochMillis = dateOfBirth,
             dateOfDiagnosisEpochMillis = dateOfDiagnosis,
             hasDiabetes = draft.hasDiabetes,

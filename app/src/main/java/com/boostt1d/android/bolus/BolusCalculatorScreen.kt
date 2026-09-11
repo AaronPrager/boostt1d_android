@@ -1,6 +1,7 @@
 package com.boostt1d.android.bolus
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -63,6 +65,11 @@ fun BolusCalculatorScreen(
     nowMillis: Long,
     /** From Snap a Meal; null when opened from the menu, so every field starts empty. */
     prefill: BolusPrefill? = null,
+    /**
+     * Set when the calculator is open over Snap a Meal. It draws a way back to the meal,
+     * which is still waiting to be logged behind this screen.
+     */
+    onClose: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = BoostTheme.colors
@@ -93,6 +100,24 @@ fun BolusCalculatorScreen(
     }
 
     ScreenScaffold(title = "Insulin Calculator", subtitle = subtitle, modifier = modifier) {
+        if (onClose != null) {
+            item {
+                Row(
+                    modifier = Modifier.clickable(onClick = onClose).padding(vertical = BoostSpacing.xxs),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(BoostSpacing.xxs),
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text("Back to your meal", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = colors.primary)
+                }
+            }
+        }
+
         if (carbRatio == null) {
             item {
                 EmptyNote(

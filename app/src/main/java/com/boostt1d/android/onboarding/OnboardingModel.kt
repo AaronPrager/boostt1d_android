@@ -42,6 +42,8 @@ data class OnboardingDraft(
     val therapy: InsulinTherapyType = InsulinTherapyType.UNSPECIFIED,
     val countryName: String = "",
     val countryCode: String = "",
+    /** Asked only in the United States. Empty everywhere else. */
+    val stateName: String = "",
     val marketingOptIn: Boolean = false,
     val connection: GlucoseConnectionOption = GlucoseConnectionOption.MANUAL,
     val nightscoutUrl: String = "",

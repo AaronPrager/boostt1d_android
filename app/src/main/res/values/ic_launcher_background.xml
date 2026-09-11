@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#1F6FEB</color>
+    <!-- The white the iOS app icon sits on. The mark is #004AAD, which is the icon's own
+         blue and not the in-app primary; the two are different and the launcher icon should
+         match what people already have on their home screen from the iPhone app. -->
+    <color name="ic_launcher_background">#FFFFFF</color>
 </resources>

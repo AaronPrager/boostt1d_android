@@ -67,6 +67,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.security.crypto)
+    implementation(libs.play.review)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
