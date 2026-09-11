@@ -14,10 +14,10 @@ import java.util.TimeZone
  * are never attached to a view; those are not ported.
  */
 enum class BoostTipId(val title: String, val message: String) {
-    FOOD(
-        "Meals live under Food",
-        "Tap Food for Snap a Meal, which estimates carbs from a photo, and Food Log, which " +
-            "keeps your saved meals in one place.",
+    SNAP(
+        "Snap a meal",
+        "The camera in the middle of the bar estimates carbs from a photo. What you save " +
+            "lands in Food Log, under Logs.",
     ),
     INSIGHTS(
         "Explore What Happened?",
@@ -25,7 +25,7 @@ enum class BoostTipId(val title: String, val message: String) {
     ),
     LOGS(
         "Log as you go",
-        "Tap Logs for Event Log and BG Log. Meals belong under Food.",
+        "Tap Logs for BG Log, Event Log and Food Log.",
     ),
     MENU(
         "Everything else",
@@ -49,7 +49,8 @@ class BoostTips(context: Context) {
     /**
      * The tip to show now, or null.
      *
-     * Order is the bar's own order, so a new user meets Food before Menu rather than in
+     * Snap comes first because it is the thing most people open the app to do, and the rest
+     * follow the bar's own order, so a new user meets them in a fixed sequence rather than in
      * whatever order they happen to open things.
      */
     fun nextTip(nowMillis: Long, timeZone: TimeZone = TimeZone.getDefault()): BoostTipId? {

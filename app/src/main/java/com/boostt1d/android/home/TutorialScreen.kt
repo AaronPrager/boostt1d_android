@@ -234,7 +234,7 @@ private fun pages(
             "Active insulin and carbs still on board",
             "The last 24 hours of glucose as a trend line",
         ),
-        "Dashboard, Food, Insights, Logs and Menu sit in the bottom bar. Snap a Meal lives under Food.",
+        "Dashboard, Insights, Snap, Logs and Menu sit in the bottom bar. The camera in the middle goes straight to Snap a Meal.",
     ),
     TutorialPage(
         Icons.Filled.CameraAlt, inRange, "Meals", "Snap a Meal",

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
@@ -88,16 +89,17 @@ enum class HomeDestination {
 /**
  * Persistent bottom bar.
  *
- * iOS carries five tabs — Dashboard, Food, Insights, Logs, Menu. Food opens a submenu with
- * Snap a Meal and the Food Log, as on iOS.
+ * Five tabs. Dashboard and Snap go straight to a screen; Insights, Logs and Menu open a
+ * submenu above the bar.
  *
- * Insights, Logs and Menu open submenus too; Insights holds the What Happened? report and the
- * Doctor Visit report, as on iOS.
+ * Snap sits in the middle and is drawn as a filled button rather than a tab, because it is
+ * the one thing here that is an action rather than a place. Photographing a meal is the most
+ * frequent thing anyone does in this app and it used to take two taps behind a Food menu.
  */
 private enum class HomeTab(val label: String, val icon: ImageVector) {
     DASHBOARD("Dashboard", Icons.Filled.Dashboard),
-    FOOD("Food", Icons.Filled.Restaurant),
     INSIGHTS("Insights", Icons.Filled.Insights),
+    SNAP("Snap", Icons.Filled.CameraAlt),
     LOGS("Logs", Icons.Filled.ListAlt),
     MENU("Menu", Icons.Filled.Menu),
 }
@@ -121,10 +123,6 @@ fun HomeShell(
     val colors = BoostTheme.colors
     var openTab by remember { mutableStateOf<HomeTab?>(null) }
 
-    val foodItems = listOf(
-        SubmenuItem("Snap a Meal", "Photo to carb estimate", Icons.Filled.CameraAlt, HomeDestination.SNAP_MEAL),
-        SubmenuItem("Food Log", "Meals, carbs and photos", Icons.Filled.Restaurant, HomeDestination.FOOD_LOG),
-    )
     val insightsItems = listOf(
         SubmenuItem("What Happened?", "Your last seven days, in plain language", Icons.Filled.Insights, HomeDestination.INSIGHTS),
         SubmenuItem("Doctor Visit", "A report to bring to your appointment", Icons.Filled.MedicalServices, HomeDestination.DOCTOR_VISIT),
@@ -132,6 +130,7 @@ fun HomeShell(
     val logsItems = listOf(
         SubmenuItem("BG Log", "Readings and charts", Icons.Filled.ShowChart, HomeDestination.BLOOD_GLUCOSE),
         SubmenuItem("Event Log", "Insulin, carbs and events", Icons.AutoMirrored.Filled.MenuBook, HomeDestination.EVENT_LOG),
+        SubmenuItem("Food Log", "Meals, carbs and photos", Icons.Filled.Restaurant, HomeDestination.FOOD_LOG),
     )
     // Eight destinations do not fit one column above the bar, so Menu lays them out two
     // across, as iOS does. Every item is visible on the first tap.
@@ -148,9 +147,9 @@ fun HomeShell(
 
     val activeTab = when (destination) {
         HomeDestination.DASHBOARD -> HomeTab.DASHBOARD
-        HomeDestination.FOOD_LOG, HomeDestination.SNAP_MEAL -> HomeTab.FOOD
+        HomeDestination.SNAP_MEAL -> HomeTab.SNAP
         HomeDestination.INSIGHTS, HomeDestination.DOCTOR_VISIT -> HomeTab.INSIGHTS
-        HomeDestination.BLOOD_GLUCOSE, HomeDestination.EVENT_LOG -> HomeTab.LOGS
+        HomeDestination.BLOOD_GLUCOSE, HomeDestination.EVENT_LOG, HomeDestination.FOOD_LOG -> HomeTab.LOGS
         else -> HomeTab.MENU
     }
 
@@ -172,14 +171,6 @@ fun HomeShell(
             modifier = Modifier.align(Alignment.BottomCenter),
             verticalArrangement = Arrangement.spacedBy(BoostSpacing.xs),
         ) {
-            AnimatedVisibility(
-                visible = openTab == HomeTab.FOOD,
-                enter = slideInVertically { it } + fadeIn(),
-                exit = slideOutVertically { it } + fadeOut(),
-            ) {
-                Submenu(foodItems, destination) { onSelect(it); openTab = null }
-            }
-
             AnimatedVisibility(
                 visible = openTab == HomeTab.INSIGHTS,
                 enter = slideInVertically { it } + fadeIn(),
@@ -215,9 +206,14 @@ fun HomeShell(
                 openTab = openTab,
                 onTap = { tab ->
                     when (tab) {
+                        // The two that are a destination rather than a menu.
                         HomeTab.DASHBOARD -> {
                             openTab = null
                             onSelect(HomeDestination.DASHBOARD)
+                        }
+                        HomeTab.SNAP -> {
+                            openTab = null
+                            onSelect(HomeDestination.SNAP_MEAL)
                         }
                         // Tapping the open tab again closes it, so the bar is never a trap.
                         else -> openTab = if (openTab == tab) null else tab
@@ -351,12 +347,16 @@ private fun BottomBar(
         ) {
             HomeTab.entries.forEach { tab ->
                 val highlighted = openTab == tab || (openTab == null && active == tab)
+                // Snap is an action, so it is a filled button and keeps its weight whether
+                // or not it is the current screen. Tinting it like the others would have it
+                // disappear into the row it is supposed to lead.
+                val isAction = tab == HomeTab.SNAP
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .selectable(
                             selected = highlighted,
-                            role = Role.Tab,
+                            role = if (isAction) Role.Button else Role.Tab,
                             onClick = { onTap(tab) },
                         )
                         .semantics(mergeDescendants = true) { contentDescription = tab.label }
@@ -364,17 +364,33 @@ private fun BottomBar(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
-                    Icon(
-                        tab.icon,
-                        contentDescription = null,
-                        tint = if (highlighted) colors.primary else colors.textTertiary,
-                        modifier = Modifier.size(24.dp),
-                    )
+                    if (isAction) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(colors.primary, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                tab.icon,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    } else {
+                        Icon(
+                            tab.icon,
+                            contentDescription = null,
+                            tint = if (highlighted) colors.primary else colors.textTertiary,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                     Text(
                         tab.label,
                         fontSize = 11.sp,
-                        fontWeight = if (highlighted) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (highlighted) colors.primary else colors.textTertiary,
+                        fontWeight = if (highlighted || isAction) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (highlighted || isAction) colors.primary else colors.textTertiary,
                     )
                 }
             }

@@ -27,7 +27,7 @@ private sealed interface FoodRoute {
 }
 
 /**
- * The Food tab: the diary, the camera, and the editor they both open. Flat, like the shell —
+ * The food screens: the diary, the camera, and the editor they both open. Flat, like the shell:
  * a detail replaces the list and Back returns to where it was opened from.
  */
 @Composable
@@ -44,6 +44,12 @@ fun FoodHost(
     highMgdl: Double,
     nowMillis: Long,
     onImportTreatments: () -> Unit,
+    /**
+     * Snap is its own destination in the bar now, so the Food Log's own button hands the
+     * navigation back to the shell. Switching route in here instead would leave the bar
+     * highlighting Logs while the camera was on screen.
+     */
+    onOpenSnap: () -> Unit,
     onOpenTherapyProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -60,7 +66,7 @@ fun FoodHost(
     when (val current = route) {
         FoodRoute.Log -> FoodLogScreen(
             foodLog = foodLog, nowMillis = nowMillis,
-            onOpenEntry = { route = FoodRoute.Edit(it) }, onAdd = { route = FoodRoute.Edit(null) }, onSnap = { route = FoodRoute.Snap },
+            onOpenEntry = { route = FoodRoute.Edit(it) }, onAdd = { route = FoodRoute.Edit(null) }, onSnap = onOpenSnap,
             onImportTreatments = onImportTreatments, modifier = modifier,
         )
         FoodRoute.Snap -> FoodAnalysisScreen(

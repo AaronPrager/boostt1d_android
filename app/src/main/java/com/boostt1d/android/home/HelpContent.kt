@@ -191,7 +191,7 @@ object HelpContent {
             title = "Snap a Meal and Food Log",
             subtitle = "Photo carb estimates and saved meals",
             steps = listOf(
-                HelpStep("Open Snap a Meal", "Tap Food in the bottom bar, then Snap a Meal."),
+                HelpStep("Open Snap a Meal", "Tap the camera in the middle of the bottom bar."),
                 HelpStep(
                     "Take or choose a photo",
                     "Photograph your meal clearly. The app sends the image for an informational " +
@@ -209,7 +209,7 @@ object HelpContent {
                 ),
                 HelpStep(
                     "Browse Food Log",
-                    "Tap Food in the bottom bar, then Food Log, to revisit past meals or edit them.",
+                    "Tap Logs in the bottom bar, then Food Log, to revisit past meals or edit them.",
                 ),
             ),
             note = "Free photo estimates are limited per day. Estimates can be wrong: use your " +

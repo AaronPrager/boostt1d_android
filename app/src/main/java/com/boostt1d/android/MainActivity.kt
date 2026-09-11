@@ -219,6 +219,7 @@ private fun BoostRoot(viewModel: AppViewModel = viewModel()) {
                         highMgdl = current.settings.highGlucose,
                         nowMillis = nowMillis,
                         onImportTreatments = viewModel::importCarbsIntoFoodLog,
+                        onOpenSnap = { destination = HomeDestination.SNAP_MEAL },
                         onOpenTherapyProfile = { destination = HomeDestination.THERAPY_PROFILE },
                         modifier = modifier,
                     )
