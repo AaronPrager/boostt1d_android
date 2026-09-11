@@ -41,6 +41,7 @@ import com.boostt1d.android.logs.ScreenScaffold
 import com.boostt1d.android.ui.BoostDivider
 import com.boostt1d.android.ui.BoostRadius
 import com.boostt1d.android.ui.BoostSpacing
+import com.boostt1d.android.ui.GlucoseStatisticsContent
 import com.boostt1d.android.ui.BoostTheme
 import com.boostt1d.android.ui.Fmt
 
@@ -356,5 +357,21 @@ private fun TrendSection(
             windowStartMillis = nowMillis - range.millis,
             windowEndMillis = nowMillis,
         )
+
+        // Always the last twenty-four hours, whatever window the chart above is showing.
+        // GMI and CV over the two-hour view would be arithmetic on a handful of readings
+        // dressed up as a clinical figure, and a day is the shortest honest window for them.
+        val dayStats = logs.statistics(settings.lowGlucose, settings.highGlucose, nowMillis - DAY_MILLIS)
+        if (dayStats.totalReadings > 0) {
+            BoostDivider(modifier = Modifier.padding(top = BoostSpacing.xs))
+            GlucoseStatisticsContent(
+                stats = dayStats,
+                unit = profile.bgUnit,
+                eyebrow = "LAST 24 HOURS",
+                modifier = Modifier.padding(top = BoostSpacing.xs),
+            )
+        }
     }
 }
+
+private const val DAY_MILLIS = 86_400_000L

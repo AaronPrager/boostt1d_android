@@ -35,7 +35,6 @@ import com.boostt1d.android.charts.glucoseColor
 import com.boostt1d.android.data.BGUnit
 import com.boostt1d.android.data.GlucoseDisplay
 import com.boostt1d.android.data.GlucoseReadingEntity
-import com.boostt1d.android.data.GlucoseCacheRules
 import com.boostt1d.android.data.GlucoseStatistics
 import com.boostt1d.android.data.LogRepository
 import com.boostt1d.android.data.LogState
@@ -45,6 +44,7 @@ import com.boostt1d.android.ui.BoostSegmented
 import com.boostt1d.android.ui.BoostSpacing
 import com.boostt1d.android.ui.BoostTheme
 import com.boostt1d.android.ui.Fmt
+import com.boostt1d.android.ui.GlucoseStatisticsCard
 
 /** How much history a log is showing, in whole days as on iOS. */
 enum class LogWindow(val days: Int) {
@@ -92,7 +92,7 @@ fun GlucoseLogScreen(
 
     val since = nowMillis - window.millis
     val visible = logs.readings.filter { it.epochMilliseconds >= since }
-    val stats = GlucoseStatistics.calculate(visible.map { it.sgv.toDouble() }, lowMgdl, highMgdl)
+    val stats = logs.statistics(lowMgdl, highMgdl, since)
 
     ScreenScaffold(
         title = "BG Log",
@@ -111,7 +111,7 @@ fun GlucoseLogScreen(
         }
 
         if (visible.isNotEmpty()) {
-            item { StatisticsCard(stats, unit) }
+            item { GlucoseStatisticsCard(stats, unit, eyebrow = "IN THIS WINDOW") }
         }
 
         item {
@@ -220,79 +220,6 @@ fun GlucoseLogScreen(
                 pendingDelete = null
             },
         )
-    }
-}
-
-@Composable
-private fun StatisticsCard(stats: GlucoseStatistics, unit: BGUnit) {
-    val colors = BoostTheme.colors
-    BoostCard {
-        Text(
-            "IN THIS WINDOW",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = colors.textSecondary,
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = BoostSpacing.xxs),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Metric("Average", Fmt.glucose(stats.averageGlucose, unit), unit.displayName)
-            Metric("GMI", Fmt.oneDecimal(stats.gmi), "%")
-            // Above 36% is the conventional variability flag, so it is coloured once it
-            // crosses rather than left for the reader to remember the threshold.
-            Metric(
-                "Variability",
-                Fmt.percent(stats.coefficientOfVariation),
-                "CV",
-                if (stats.coefficientOfVariation > 36) colors.high else null,
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = BoostSpacing.sm),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Metric("Below", Fmt.percent(stats.timeBelowRange), null, colors.low)
-            Metric("In range", Fmt.percent(stats.timeInRange), null, colors.inRange)
-            Metric("Above", Fmt.percent(stats.timeAboveRange), null, colors.high)
-        }
-
-        // Very high is a subset of above, so it sits under that row rather than beside it
-        // as a fourth slice that would not add up to a hundred.
-        if (stats.timeVeryHigh > 0) {
-            Text(
-                "Of which ${Fmt.percent(stats.timeVeryHigh)} was very high " +
-                    "(${GlucoseDisplay.format(GlucoseCacheRules.VERY_HIGH_MGDL, unit)} " +
-                    "${unit.displayName} or above).",
-                fontSize = 12.sp,
-                color = colors.veryHigh,
-                modifier = Modifier.padding(top = BoostSpacing.xs),
-            )
-        }
-    }
-}
-
-@Composable
-private fun Metric(
-    label: String,
-    value: String,
-    suffix: String?,
-    valueColor: androidx.compose.ui.graphics.Color? = null,
-) {
-    val colors = BoostTheme.colors
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, fontSize = 12.sp, color = colors.textSecondary)
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(
-                value,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = valueColor ?: colors.textPrimary,
-            )
-            suffix?.let { Text(it, fontSize = 11.sp, color = colors.textTertiary) }
-        }
     }
 }
 
